@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'k8s-cluster'
+    # IMPORTANT: Change this IP to the Tailscale IP (100.x.x.x) of your K8s node/service on VPS 1.
+    static_configs:
+      - targets: ['100.x.x.x:8080']

@@ -1,0 +1,117 @@
+name: Enterprise SecOps Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  GO_VERSION: '1.26'
+
+jobs:
+  # Phase 1: Test & Static Analysis
+  sast-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./app
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for Gitleaks to scan history
+          
+      - name: Secret Scanning (Gitleaks)
+        if: ${{ !env.ACT }}
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: app/go.sum
+          
+      - name: Run go vet (Native Linter)
+        run: go vet ./...
+          
+      - name: Run Unit Tests
+        run: go test -v ./...
+        
+      - name: Run gosec (SAST)
+        uses: securego/gosec@master
+        with:
+          args: ./...
+          
+  # Phase 2: Build & Container Scan
+  build-and-sca:
+    needs: sast-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Build local image for testing
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:test
+          
+      - name: Run Trivy Scanner (SCA)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.IMAGE_NAME }}:test'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+          
+  # Phase 3: Publish to Registry
+  publish:
+    needs: build-and-sca
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # Required for Cosign keyless signing
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Generate SBOM (Software Bill of Materials)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.5.0
+        
+      - name: Sign Docker Image (Zero Trust)
+        run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest

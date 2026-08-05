@@ -1,0 +1,26 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: podinfo-route
+  namespace: default
+spec:
+  # 1. Attach to the Admin's Gateway
+  parentRefs:
+    - name: main-gateway
+      namespace: gateway-system
+      
+  # 2. Match the Domain Name
+  hostnames:
+    - "podinfo.local"
+    
+  # 3. Routing Rules
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      # 4. Forward traffic to our Service
+      backendRefs:
+        - name: podinfo
+          port: 80
+          weight: 100

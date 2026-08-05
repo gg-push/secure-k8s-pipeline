@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# 1. Master list of all files to apply
+resources:
+  - deployment.yaml
+  - service.yaml
+  - httproute.yaml
+  - sealed-secret.yaml
+
+# 2. Inject these labels into EVERY file automatically
+commonLabels:
+  managed-by: argocd
+  env: production
+
+# 3. Dynamic tag override (CI pipeline can update this line without touching deployment.yaml)
+images:
+  - name: ghcr.io/your-username/secure-k8s-pipeline
+    newTag: latest

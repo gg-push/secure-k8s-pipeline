@@ -1,0 +1,33 @@
+# Ignore raw K8s secrets (Critical GitOps rule)
+*secret.yaml
+*secrets.yaml
+# CRITICAL: Allow Sealed Secrets to be pushed to Git!
+!*sealed-secret.yaml
+!*sealed-secrets.yaml
+
+# Env files
+.env
+.env.*
+
+# IDEs
+.vscode/
+.idea/
+
+# Personal Notes
+plan.md
+*-notes.md
+github-notes.md
+terraform-notes.md
+
+# Ignore Go build artifacts
+/app/podinfo
+/app/**/*.test
+
+# OS files
+.DS_Store
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars

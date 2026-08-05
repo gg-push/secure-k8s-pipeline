@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: podinfo
+  # --------------------------------------------------------------------------
+  # ZERO-TRUST OBSERVABILITY (Tailscale VPN)
+  # Steps to activate in production:
+  # 1. Create OAuth Client in Tailscale (Devices:Write, AuthKeys:Write).
+  # 2. Run: helm repo add tailscale https://pkgs.tailscale.com/helmcharts
+  # 3. Run: helm install tailscale-operator tailscale/tailscale-operator \
+  #         --namespace tailscale --create-namespace \
+  #         --set-string oauth.clientId="XXX" --set-string oauth.clientSecret="XXX"
+  # 4. Uncomment the annotations below and push to Git.
+  # 5. ArgoCD syncs, Operator wakes up, gives this Service a private IP.
+  # --------------------------------------------------------------------------
+  # annotations:
+  #   tailscale.com/expose: "true"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 9898
+      protocol: TCP
+  selector:
+    app: podinfo
