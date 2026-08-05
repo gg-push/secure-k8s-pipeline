@@ -21,9 +21,11 @@ We chose GitHub Actions over Jenkins because it is a fully managed SaaS (zero se
 Our GitHub Action (`.github/workflows/ci.yml`) implements "Shift-Left" security. It blocks bad code from ever reaching the registry.
 
 **Pipeline Stages:**
-1. **Linting**: `golangci-lint` enforces clean code.
+1. **Linting**: Native `go vet` enforces clean code. *(Note: We use native tooling because third-party linters like `golangci-lint` often lag behind bleeding-edge Go language releases like 1.26).* 
 2. **Unit Tests**: Verifies logic.
-3. **SAST (Static Application Security Testing)**: We use `gosec` to scan the raw Go code for hardcoded credentials, SQL injections, and bad cryptography.
+3. **SAST (Static Application Security Testing)**: 
+   - We use `Gitleaks` to aggressively scan the entire Git history for leaked passwords. We implement a strict `.gitleaksignore` configuration to bypass dummy test tokens.
+   - We use `gosec` to scan the raw Go code for hardcoded credentials, SQL injections, and bad cryptography.
    - *Why gosec?* It is purpose-built and highly optimized specifically for Go.
    - *Alternatives*: We could use **Semgrep** or **SonarQube** for this phase. Semgrep is excellent for multi-language repositories, but for a pure Go microservice, `gosec` is lighter and faster.
 4. **Build**: Executes multi-stage Docker build.
