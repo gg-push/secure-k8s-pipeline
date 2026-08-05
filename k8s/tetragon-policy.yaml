@@ -7,11 +7,11 @@ spec:
   - call: "security_file_open"
     syscall: false
     args:
-    - index: 1
+    - index: 0
       type: "file"
     selectors:
     - matchArgs:
-      - index: 1
+      - index: 0
         operator: "Equal"
         values:
         - "/etc/shadow"
