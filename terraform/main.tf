@@ -52,10 +52,4 @@ resource "helm_release" "argocd" {
   depends_on = [kind_cluster.default]
 }
 
-# 4. The Handover: Apply our Root Application so GitOps takes over
-resource "kubernetes_manifest" "argocd_root" {
-  manifest = yamldecode(file("../k8s/argocd-app.yaml"))
 
-  # Wait for ArgoCD to be fully installed first
-  depends_on = [helm_release.argocd]
-}
