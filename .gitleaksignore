@@ -1,0 +1,6 @@
+[allowlist]
+paths = [
+    '''app/pkg/api/grpc/token_test.go''',
+    '''app/cmd/podinfo/main.go''',
+    '''app/pkg/api/http/token_test.go'''
+]
