@@ -98,7 +98,13 @@ In a real-world corporate environment, the GitHub repository will be **Private**
 1. **ArgoCD Git Access**: ArgoCD requires a GitHub Personal Access Token (PAT) or SSH Deploy Key stored as a Kubernetes `Secret` to read the private YAML manifests.
 2. **K8s Image Pull**: The Kubernetes `Deployment` requires an `imagePullSecrets` configuration to authenticate with the private GHCR registry and pull the Docker image.
 
-## Phase 8: Observability & Monitoring (VPS 2)
+## Phase 8: eBPF Runtime Security (Cilium Tetragon)
+
+We inject **Tetragon** directly into the Kubernetes Node's host kernel via Helm. 
+- **Zero-Overhead Observability**: Watches every system call and network packet dynamically.
+- **Surgical Execution (`TracingPolicy`)**: We define YAML policies that automatically trigger `SIGKILL` if a container executes unauthorized commands (e.g., reading `/etc/shadow`), instantly terminating the hacker's process before the kernel executes it.
+
+## Phase 9: Observability & Monitoring (VPS 2)
 In an enterprise architecture, monitoring is decoupled from the application cluster. We use a dedicated server (VPS 2) running Docker Compose.
 
 ### The Architecture (Zero Trust Networking)
