@@ -15,5 +15,6 @@ commonLabels:
 
 # 3. Dynamic tag override (CI pipeline can update this line without touching deployment.yaml)
 images:
-  - name: ghcr.io/your-username/secure-k8s-pipeline
+  - name: ghcr.io/gg-push/secure-k8s-pipeline
     newTag: latest
+
