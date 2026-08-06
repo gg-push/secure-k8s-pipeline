@@ -64,6 +64,9 @@ resource "helm_release" "tetragon" {
   namespace        = "kube-system"
   version          = "1.1.0"
 
+  depends_on = [kind_cluster.default]
+}
+
 # 5. Install Envoy Gateway Controller (Automatically installs Gateway API CRDs)
 resource "helm_release" "envoy_gateway" {
   name             = "eg"
