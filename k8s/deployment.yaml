@@ -19,7 +19,7 @@ spec:
         runAsUser: 1000
       containers:
         - name: podinfo
-          image: ghcr.io/your-username/secure-k8s-pipeline:latest
+          image: ghcr.io/gg-push/secure-k8s-pipeline:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 9898
