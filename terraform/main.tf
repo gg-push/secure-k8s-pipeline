@@ -64,18 +64,7 @@ resource "helm_release" "tetragon" {
   namespace        = "kube-system"
   version          = "1.1.0"
 
-  depends_on = [kind_cluster.default]
-}
-
-# 5. Install Kubernetes Gateway API CRDs
-resource "null_resource" "gateway_api_crds" {
-  provisioner "local-exec" {
-    command = "kubectl kustomize https://github.com/kubernetes-sigs/gateway-api/config/crd?ref=v1.1.0 | kubectl apply -f -"
-  }
-  depends_on = [kind_cluster.default]
-}
-
-# 6. Install Envoy Gateway Controller
+# 5. Install Envoy Gateway Controller (Automatically installs Gateway API CRDs)
 resource "helm_release" "envoy_gateway" {
   name             = "eg"
   repository       = "oci://docker.io/envoyproxy"
@@ -84,5 +73,5 @@ resource "helm_release" "envoy_gateway" {
   create_namespace = true
   version          = "v1.1.0"
 
-  depends_on = [null_resource.gateway_api_crds]
+  depends_on = [kind_cluster.default]
 }
