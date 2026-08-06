@@ -62,3 +62,18 @@ resource "helm_release" "tetragon" {
 
   depends_on = [kind_cluster.default]
 }
+
+# 5. DUMMY VULNERABLE RESOURCE (To test Checkov CI/CD blocking)
+# This opens SSH (Port 22) to the entire internet (0.0.0.0/0).
+# Checkov should detect this and instantly fail the GitHub Action pipeline.
+resource "aws_security_group" "bad_sg" {
+  name        = "allow_all_ssh"
+  description = "Allow all inbound SSH traffic"
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # VULNERABILITY: Open to world
+  }
+}

@@ -47,9 +47,21 @@ jobs:
         with:
           args: ./...
           
+  # Phase 1.5: Infrastructure as Code Scan
+  iac-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Run Checkov (Terraform SAST)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform/
+          framework: terraform
+          
   # Phase 2: Build & Container Scan
   build-and-sca:
-    needs: sast-and-test
+    needs: [sast-and-test, iac-scan]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
