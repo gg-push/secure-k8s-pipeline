@@ -5,8 +5,9 @@ kind: Kustomization
 resources:
   - deployment.yaml
   - service.yaml
-  - httproute.yaml
-  - sealed-secret.yaml
+  - tetragon-policy.yaml
+#  - sealed-secret.yaml
+#  - httproute.yaml
 
 # 2. Inject these labels into EVERY file automatically
 commonLabels:

@@ -52,4 +52,13 @@ resource "helm_release" "argocd" {
   depends_on = [kind_cluster.default]
 }
 
+# 4. Install Tetragon (eBPF Security) automatically via Helm
+resource "helm_release" "tetragon" {
+  name             = "tetragon"
+  repository       = "https://helm.cilium.io"
+  chart            = "tetragon"
+  namespace        = "kube-system"
+  version          = "1.1.0"
 
+  depends_on = [kind_cluster.default]
+}

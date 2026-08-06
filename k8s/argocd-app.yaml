@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/YOUR-USERNAME/secure-k8s-pipeline.git'
+    repoURL: 'https://github.com/gg-push/secure-k8s-pipeline.git'
     targetRevision: HEAD
     path: k8s
   destination:
