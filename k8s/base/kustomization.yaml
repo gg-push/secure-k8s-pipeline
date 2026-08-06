@@ -6,8 +6,9 @@ resources:
   - deployment.yaml
   - service.yaml
   - tetragon-policy.yaml
+  - gateway.yaml
+  - httproute.yaml
 #  - sealed-secret.yaml
-#  - httproute.yaml
 
 # 2. Inject these labels into EVERY file automatically
 commonLabels:
