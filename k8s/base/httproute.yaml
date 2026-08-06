@@ -7,7 +7,7 @@ spec:
   # 1. Attach to the Admin's Gateway
   parentRefs:
     - name: main-gateway
-      namespace: gateway-system
+      namespace: default
       
   # 2. Match the Domain Name
   hostnames:
