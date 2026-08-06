@@ -12,6 +12,10 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.23"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
   }
 }
 
@@ -61,4 +65,24 @@ resource "helm_release" "tetragon" {
   version          = "1.1.0"
 
   depends_on = [kind_cluster.default]
+}
+
+# 5. Install Kubernetes Gateway API CRDs
+resource "null_resource" "gateway_api_crds" {
+  provisioner "local-exec" {
+    command = "kubectl kustomize https://github.com/kubernetes-sigs/gateway-api/config/crd?ref=v1.1.0 | kubectl apply -f -"
+  }
+  depends_on = [kind_cluster.default]
+}
+
+# 6. Install Envoy Gateway Controller
+resource "helm_release" "envoy_gateway" {
+  name             = "eg"
+  repository       = "oci://docker.io/envoyproxy"
+  chart            = "gateway-helm"
+  namespace        = "envoy-gateway-system"
+  create_namespace = true
+  version          = "v1.1.0"
+
+  depends_on = [null_resource.gateway_api_crds]
 }

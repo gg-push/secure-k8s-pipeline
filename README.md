@@ -60,9 +60,13 @@ To achieve true GitOps, we do not run `kubectl apply` manually, nor do we let Gi
 
 ## Phase 6: Next-Gen Routing (Gateway API)
 
-Instead of using legacy `Ingress`, we use the modern Kubernetes **Gateway API** (`HTTPRoute`).
+Instead of using legacy `Ingress`, we use the modern Kubernetes **Gateway API** (`HTTPRoute`) powered by Envoy Proxy.
 - **Decoupled Architecture**: Cluster admins manage the `Gateway` infrastructure, while developers independently manage the `HTTPRoute` application logic.
 - **Advanced Traffic Management**: Natively supports canary deployments, weight-based traffic splitting, and header matching without relying on ugly vendor-specific annotations.
+
+### Installation (Automated via Terraform)
+Gateway API does not come pre-installed in standard Kubernetes clusters. In our Enterprise Architecture, this is fully automated. 
+Our Terraform code (`terraform/main.tf`) uses a `null_resource` to install the core Kubernetes Gateway CRDs, and the Helm provider to seamlessly install the Envoy Edge Proxy alongside the cluster bootstrap.
 
 ## Phase 7: Kustomize (The Glue)
 
