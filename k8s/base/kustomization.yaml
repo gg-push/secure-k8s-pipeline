@@ -12,10 +12,4 @@ resources:
 # 2. Inject these labels into EVERY file automatically
 commonLabels:
   managed-by: argocd
-  env: production
-
-# 3. Dynamic tag override (CI pipeline can update this line without touching deployment.yaml)
-images:
-  - name: ghcr.io/gg-push/secure-k8s-pipeline
-    newTag: latest
 
