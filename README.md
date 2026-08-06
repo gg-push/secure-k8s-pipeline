@@ -2,6 +2,39 @@
 
 This project demonstrates a production-grade, secure CI/CD pipeline and K8s deployment for a Go microservice.
 
+## Enterprise Architecture
+
+```mermaid
+graph LR
+    Dev[Developer] -->|git push| Git[GitHub Repository]
+    Git -->|Triggers| CI[GitHub Actions CI]
+
+    subgraph CI Pipeline
+        Gitleaks[Gitleaks: Secret Scan]
+        Checkov[Checkov: IaC Terraform/K8s Scan]
+        Gosec[gosec: Go Application SAST]
+        Trivy[Trivy: Container SCA Scan]
+        SBOM[Anchore: Generate SBOM]
+        Cosign[Cosign: Zero-Trust Signing]
+    end
+
+    CI --> Gitleaks
+    Gitleaks --> Checkov
+    Checkov --> Gosec
+    Gosec --> Trivy
+    Trivy --> SBOM
+    SBOM --> Cosign
+    Cosign -->|Push Verified Image| GHCR[GitHub Container Registry]
+
+    Argo[ArgoCD GitOps] -->|Polls| Git
+    Argo -->|Deploys to KinD| K8s[Kubernetes Cluster]
+
+    User[External User] -->|Port 80| Envoy[Envoy Edge Gateway]
+    Envoy -->|HTTPRoute| Pod[Podinfo Go Microservice]
+    
+    Tetragon[Cilium Tetragon eBPF] -->|Monitors| Pod
+```
+
 ## Phase 1: The Application & Dockerization
 
 **The Base Application**
