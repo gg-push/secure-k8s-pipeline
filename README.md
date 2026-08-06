@@ -71,6 +71,8 @@ We use `kustomization.yaml` to group all Kubernetes manifests.
 
 ## Future Enhancements
 While this pipeline is production-grade, a massive enterprise scale-out would add:
+- **Infrastructure Security Scanning (Checkov)**: Analyze raw Terraform code in the GitHub Action and block deployment if security rules (like open firewalls) are violated.
+- **Multi-Environment GitOps**: Split the `k8s/` folder into `base/`, `overlays/dev`, and `overlays/prod` to demonstrate dynamic environment promotion.
 - **Horizontal Pod Autoscaler (HPA)**: Auto-scale pod replicas from 2 to 50 dynamically based on CPU/Memory usage.
 - **Cloud Provider IaC (Terraform)**: Expand our local `kind` Terraform module to provision a real AWS EKS cluster and VPC network.
 - **ServiceMonitor (Prometheus)**: Automatically tell Prometheus to scrape the `/metrics` endpoint built into our Go app.
