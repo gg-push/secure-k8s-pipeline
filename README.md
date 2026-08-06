@@ -66,7 +66,8 @@ Instead of using legacy `Ingress`, we use the modern Kubernetes **Gateway API** 
 
 ### Installation (Automated via Terraform)
 Gateway API does not come pre-installed in standard Kubernetes clusters. In our Enterprise Architecture, this is fully automated. 
-Our Terraform code (`terraform/main.tf`) uses a `null_resource` to install the core Kubernetes Gateway CRDs, and the Helm provider to seamlessly install the Envoy Edge Proxy alongside the cluster bootstrap.
+Our Terraform code (`terraform/main.tf`) uses the Helm provider to seamlessly install the Envoy Edge Proxy and the underlying Gateway API CRDs alongside the cluster bootstrap. *(See `k8s-notes.md` for a technical deep-dive on troubleshooting Helm CRD lifecycle conflicts during manual vs automated installations).* 
+
 
 ## Phase 7: Kustomize (The Glue)
 

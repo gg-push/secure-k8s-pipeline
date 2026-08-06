@@ -6,6 +6,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - tetragon-policy.yaml
+  - gatewayclass.yaml
   - gateway.yaml
   - httproute.yaml
 #  - sealed-secret.yaml
