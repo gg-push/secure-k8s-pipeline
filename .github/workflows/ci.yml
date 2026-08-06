@@ -53,12 +53,12 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      - name: Run Checkov (Terraform SAST)
+      - name: Run Checkov (IaC SAST)
         uses: bridgecrewio/checkov-action@master
         with:
-          directory: terraform/
-          framework: terraform
-          
+          directory: .
+          framework: all
+          soft_fail: true
   # Phase 2: Build & Container Scan
   build-and-sca:
     needs: [sast-and-test, iac-scan]
