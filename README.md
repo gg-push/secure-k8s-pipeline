@@ -27,7 +27,7 @@ graph LR
     Cosign -->|Push Verified Image| GHCR[GitHub Container Registry]
 
     Argo[ArgoCD GitOps] -->|Polls| Git
-    Argo -->|Deploys to KinD| K8s[Kubernetes Cluster]
+    Argo -->|Deploys to k3d| K8s[Kubernetes Cluster]
 
     User[External User] -->|Port 80| Envoy[Envoy Edge Gateway]
     Envoy -->|HTTPRoute| Pod[Podinfo Go Microservice]
@@ -112,7 +112,7 @@ While this pipeline is production-grade, a massive enterprise scale-out would ad
 - **Infrastructure Security Scanning (Checkov)**: Analyze raw Terraform code in the GitHub Action and block deployment if security rules (like open firewalls) are violated.
 - **Multi-Environment GitOps**: Split the `k8s/` folder into `base/`, `overlays/dev`, and `overlays/prod` to demonstrate dynamic environment promotion.
 - **Horizontal Pod Autoscaler (HPA)**: Auto-scale pod replicas from 2 to 50 dynamically based on CPU/Memory usage.
-- **Cloud Provider IaC (Terraform)**: Expand our local `kind` Terraform module to provision a real AWS EKS cluster and VPC network.
+- **Cloud Provider IaC (Terraform)**: Expand our local `k3d` Terraform module to provision a real AWS EKS cluster and VPC network.
 - **ServiceMonitor (Prometheus)**: Automatically tell Prometheus to scrape the `/metrics` endpoint built into our Go app.
 
 ## How to Deploy (Run it Yourself)
@@ -128,8 +128,8 @@ To see this pipeline in action, follow these exact steps:
 3. **Infrastructure as Code (Terraform)**: 
    - Edit `k8s/argocd-app.yaml` and change `repoURL` to point to your new GitHub repo.
    - Navigate to the `terraform/` directory.
-   - Run `terraform init` and `terraform apply -auto-approve`.
-   - *What happens?* Terraform automatically spins up a free Kubernetes cluster (using `kind`), installs ArgoCD via Helm, and automatically applies the root `argocd-app.yaml` handover file. Zero manual `kubectl` commands required.
+   - Run `terraform init`, then `terraform apply -target=null_resource.k3d_cluster -auto-approve` to bootstrap the cluster, then `terraform apply -auto-approve` to install everything onto it. *(Two stages because k3d has no native Terraform provider — see `terraform-notes.md` for why.)*
+   - *What happens?* Terraform automatically spins up a free Kubernetes cluster (using `k3d`), installs ArgoCD via Helm, and automatically applies the root `argocd-app.yaml` handover file. Zero manual `kubectl` commands required.
 4. **Watch the Magic**: 
    - ArgoCD wakes up, connects to your Git repo, reads `kustomization.yaml`, and automatically deploys the Gateway, Service, Deployment, and Secrets.
 
