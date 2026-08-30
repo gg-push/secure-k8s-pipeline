@@ -31,3 +31,5 @@ terraform-notes.md
 *.tfstate
 *.tfstate.backup
 *.tfvars
+terraform/kubeconfig-*.yaml
+terraform/gitops-cluster-config
