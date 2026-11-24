@@ -20,7 +20,7 @@ Production-hardened DevSecOps CI/CD pipeline and pull-based GitOps stack deployi
 | **IaC & Manifest Gate** | Blocking Terraform, Kustomize & policy scan | `terraform fmt/validate`, `kubectl kustomize`, `Checkov` (`soft_fail: false`, `.checkov.yml`) |
 | **Container & Supply Chain** | Single-build SCA + immutable digest signing | `FROM scratch` (`USER 1000`), `Trivy` (`CRITICAL/HIGH`), `@sha256` push, SPDX SBOM, keyless `Cosign` |
 | **Pod Security (Restricted)** | Zero-privilege container runtime | `automountServiceAccountToken: false`, `readOnlyRootFilesystem: true`, `drop: ["ALL"]`, `RuntimeDefault` seccomp |
-| **Network Isolation** | Default-deny pod ingress/egress | `NetworkPolicy` allows `:9898` only from same-ns, `envoy-gateway-system`, `tailscale`, `monitoring`; DNS `:53` egress |
+| **Network Isolation** | Default-deny pod ingress/egress | `NetworkPolicy` allows `:9898` only from same-ns and `envoy-gateway-system`; DNS `:53` egress |
 | **Secrets Management** | Asymmetric GitOps encryption + file mount | `sealed-secrets-controller` (`kube-system`), `scripts/seal-secret.sh`, read-only `0400` file mount (no env var secrets) |
 | **eBPF Runtime Security** | Kernel-level syscall/file enforcement | `TracingPolicyNamespaced` scoped strictly to `app: podinfo` (`SIGKILL` on `/etc/shadow` or `sh`/`bash`/`curl`/`wget`) |
 
@@ -52,11 +52,6 @@ secure-k8s-pipeline/
 │   ├── cluster/gatewayclass.yaml       # Cluster-scoped Envoy GatewayClass (eg)
 │   ├── base/                           # PSS-Restricted Deployment, Service, NetworkPolicy, Tetragon, Gateway
 │   └── overlays/{dev,prod}/            # Isolated namespace overlays + prod PodDisruptionBudget
-├── monitoring/
-│   ├── docker-compose.yml              # Pinned Prometheus (v3.2.1) & Grafana (11.5.2), RO mounts, no-new-privileges
-│   ├── grafana/provisioning/           # Auto-provisioned Prometheus datasource
-│   ├── prometheus.yml                  # Tailscale /metrics scrape configuration
-│   └── .env.example                    # Bind IP & required Grafana admin password template
 ├── scripts/seal-secret.sh              # Helper to encrypt podinfo-secrets via kubeseal
 └── terraform/main.tf                   # 2-stage k3d bootstrap + ArgoCD, Sealed Secrets, Tetragon & Envoy Helm charts
 ```
@@ -86,14 +81,4 @@ terraform -chdir=terraform destroy -auto-approve
 ```bash
 ./scripts/seal-secret.sh prod
 # Add `- sealed-secret.yaml` to k8s/overlays/prod/kustomization.yaml and commit
-```
-
-## Quickstart 3: Decoupled Monitoring Stack (Prometheus + Grafana)
-
-```bash
-cd monitoring
-cp .env.example .env
-# Set GRAFANA_ADMIN_PASSWORD (and MONITORING_BIND_IP if binding to a Tailscale interface)
-# Update monitoring/prometheus.yml with your podinfo Tailscale MagicDNS host or IP
-docker compose up -d
 ```

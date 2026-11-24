@@ -1,9 +1,0 @@
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-  - job_name: "podinfo"
-    metrics_path: /metrics
-    # Point at the Tailscale MagicDNS hostname or private Tailscale IP exposed by k8s/base/service.yaml.
-    static_configs:
-      - targets: ["<TAILSCALE_PODINFO_HOST>:80"]
