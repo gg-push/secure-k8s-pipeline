@@ -90,15 +90,14 @@ resource "helm_release" "sealed_secrets" {
 
 # 5. Install Tetragon (eBPF Security) automatically via Helm
 #
-# Pinned at 1.7.0: on recent host kernels, 1.1.0's precompiled multi-kprobe BPF
-# object fails the in-kernel verifier ("load program: invalid argument") and the
-# TracingPolicy never attaches. 1.7.0 loads cleanly.
+# Pinned at 1.8.0 for newer kernel/BTF compatibility (1.1.0's precompiled
+# multi-kprobe BPF object failed the in-kernel verifier on modern kernels).
 resource "helm_release" "tetragon" {
   name       = "tetragon"
   repository = "https://helm.cilium.io"
   chart      = "tetragon"
   namespace  = "kube-system"
-  version    = "1.7.0"
+  version    = "1.8.0"
 
   # Re-expose the node's debugfs/tracefs (bind-mounted from the host at cluster
   # creation, see null_resource.k3d_cluster) into the tetragon pod itself.

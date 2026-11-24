@@ -123,7 +123,7 @@
 
     <g transform="translate(850,232)">
       <rect width="244" height="68" rx="5" fill="#FFF5F6" stroke="#DD344C" stroke-width="1.3"/>
-      <text x="122" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Cilium Tetragon (1.7.0)</text>
+      <text x="122" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Cilium Tetragon (1.8.0)</text>
       <text x="122" y="40" text-anchor="middle" font-size="10" fill="#545B64">Host Kernel eBPF Agent</text>
       <text x="122" y="56" text-anchor="middle" font-size="9.5" fill="#DD344C" font-weight="700">debugfs / tracefs kprobes</text>
     </g>
