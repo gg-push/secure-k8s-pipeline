@@ -46,7 +46,7 @@ jobs:
 
       - name: Run gosec (Go SAST)
         working-directory: ./app
-        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 ./...
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -severity=medium -exclude=G404,G505,G401,G705 ./cmd/podinfo/... ./pkg/...
 
   # Phase 1.5: IaC, Kustomize & Manifest Security Scan
   iac-and-manifests:

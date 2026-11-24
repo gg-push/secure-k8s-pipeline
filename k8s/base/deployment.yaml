@@ -26,6 +26,9 @@ spec:
         - name: podinfo
           image: ghcr.io/gg-push/secure-k8s-pipeline:latest
           imagePullPolicy: Always
+          args:
+            - --config-path=/etc/podinfo/secrets
+            - --config=config.yaml
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -36,18 +39,14 @@ spec:
             - name: http
               containerPort: 9898
               protocol: TCP
-          env:
-            - name: PODINFO_JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: podinfo-secrets
-                  key: jwt-secret
-                  optional: true
           volumeMounts:
             - name: tmp
               mountPath: /tmp
             - name: data
               mountPath: /data
+            - name: secrets
+              mountPath: /etc/podinfo/secrets
+              readOnly: true
           resources:
             requests:
               cpu: 10m
@@ -72,3 +71,8 @@ spec:
           emptyDir: {}
         - name: data
           emptyDir: {}
+        - name: secrets
+          secret:
+            secretName: podinfo-secrets
+            defaultMode: 256
+            optional: true

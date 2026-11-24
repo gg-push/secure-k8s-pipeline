@@ -21,7 +21,7 @@ OUT_FILE="k8s/overlays/${ENV}/sealed-secret.yaml"
 
 kubectl create secret generic podinfo-secrets \
   --namespace "podinfo-${ENV}" \
-  --from-literal="jwt-secret=${SECRET_VAL}" \
+  --from-literal="config.yaml=jwt-secret: ${SECRET_VAL}" \
   --dry-run=client \
   -o yaml \
   | kubeseal \

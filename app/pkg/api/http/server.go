@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"path"
 	"strings"
@@ -136,7 +135,6 @@ func (s *Server) registerHandlers() {
 	rootPath := s.prefixedPath("/")
 
 	s.router.Handle(s.prefixedPath("/metrics"), promhttp.Handler())
-	s.router.PathPrefix(s.prefixedPath("/debug/pprof/")).Handler(http.DefaultServeMux)
 	s.router.HandleFunc(rootPath, s.indexHandler).HeadersRegexp("User-Agent", "^Mozilla.*").Methods("GET")
 	s.router.HandleFunc(rootPath, s.infoHandler).Methods("GET")
 	if rootPath != "/" {
@@ -314,7 +312,7 @@ func (s *Server) startSecureServer() *http.Server {
 
 func (s *Server) startMetricsServer() {
 	if s.config.PortMetrics > 0 {
-		mux := http.DefaultServeMux
+		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
 		mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -322,8 +320,9 @@ func (s *Server) startMetricsServer() {
 		})
 
 		srv := &http.Server{
-			Addr:    fmt.Sprintf(":%v", s.config.PortMetrics),
-			Handler: mux,
+			Addr:              fmt.Sprintf(":%v", s.config.PortMetrics),
+			Handler:           mux,
+			ReadHeaderTimeout: 10 * time.Second,
 		}
 
 		srv.ListenAndServe()

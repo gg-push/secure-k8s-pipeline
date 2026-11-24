@@ -63,7 +63,7 @@ chmod +x scripts/seal-secret.sh
 ./scripts/seal-secret.sh prod
 ```
 
-Then add `- sealed-secret.yaml` to `k8s/overlays/prod/kustomization.yaml` and commit. [`deployment.yaml`](k8s/base/deployment.yaml) references `podinfo-secrets` (`optional: true`) so pods start cleanly before sealing and automatically load the decrypted secret once applied.
+Then add `- sealed-secret.yaml` to `k8s/overlays/prod/kustomization.yaml` and commit. [`deployment.yaml`](k8s/base/deployment.yaml) mounts `podinfo-secrets` read-only at `/etc/podinfo/secrets/config.yaml` (`optional: true`, mode `0400`) so pods start cleanly before sealing and automatically load the decrypted secret file without exposing secrets as environment variables.
 
 ## Phase 5–7: ArgoCD GitOps, Gateway API & Multi-Env Kustomize
 

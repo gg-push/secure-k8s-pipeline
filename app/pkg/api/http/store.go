@@ -32,7 +32,7 @@ func (s *Server) storeWriteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hash := hash(string(body))
-	err := os.WriteFile(path.Join(s.config.DataPath, hash), body, 0644)
+	err := os.WriteFile(path.Join(s.config.DataPath, hash), body, 0600)
 	if err != nil {
 		s.logger.Warn("writing file failed", zap.Error(err), zap.String("file", path.Join(s.config.DataPath, hash)))
 		s.ErrorResponse(w, r, span, "writing file failed", http.StatusInternalServerError)
@@ -59,7 +59,7 @@ func (s *Server) storeReadHandler(w http.ResponseWriter, r *http.Request) {
 		s.ErrorResponse(w, r, span, "invalid hash", http.StatusBadRequest)
 		return
 	}
-	content, err := os.ReadFile(path.Join(s.config.DataPath, hash))
+	content, err := os.ReadFile(path.Join(s.config.DataPath, hash)) // #nosec G304,G703 -- hash is strictly validated against ^[a-f0-9]{40}$
 	if err != nil {
 		s.logger.Warn("reading file failed", zap.Error(err), zap.String("file", path.Join(s.config.DataPath, hash)))
 		s.ErrorResponse(w, r, span, "reading file failed", http.StatusInternalServerError)
