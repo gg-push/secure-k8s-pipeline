@@ -1,36 +1,38 @@
 apiVersion: cilium.io/v1alpha1
-kind: TracingPolicy
+kind: TracingPolicyNamespaced
 metadata:
   name: block-sensitive-files
 spec:
+  podSelector:
+    matchLabels:
+      app: podinfo
   kprobes:
-  - call: "security_file_open"
-    syscall: false
-    args:
-    - index: 0
-      type: "file"
-    selectors:
-    - matchArgs:
-      - index: 0
-        operator: "Equal"
-        values:
-        - "/etc/shadow"
-      matchActions:
-      - action: Sigkill
-  - call: "sys_execve"
-    syscall: true
-    args:
-    - index: 0
-      type: "string"
-    selectors:
-    - matchArgs:
-      - index: 0
-        operator: "Equal"
-        values:
-        - "/bin/bash"
-        - "/bin/sh"
-        - "/usr/bin/curl"
-        - "/usr/bin/wget"
-      matchActions:
-      - action: Sigkill
-
+    - call: "security_file_open"
+      syscall: false
+      args:
+        - index: 0
+          type: "file"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              values:
+                - "/etc/shadow"
+          matchActions:
+            - action: Sigkill
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              values:
+                - "/bin/bash"
+                - "/bin/sh"
+                - "/usr/bin/curl"
+                - "/usr/bin/wget"
+          matchActions:
+            - action: Sigkill

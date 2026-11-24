@@ -43,11 +43,11 @@ func (s *Server) echoHandler(w http.ResponseWriter, r *http.Request) {
 			go func(index int, backend string) {
 				defer wg.Done()
 
-				ctx = httptrace.WithClientTrace(ctx, otelhttptrace.NewClientTrace(ctx))
-				ctx, cancel := context.WithTimeout(ctx, s.config.HttpClientTimeout)
+				reqCtx := httptrace.WithClientTrace(ctx, otelhttptrace.NewClientTrace(ctx))
+				reqCtx, cancel := context.WithTimeout(reqCtx, s.config.HttpClientTimeout)
 				defer cancel()
 
-				backendReq, err := http.NewRequestWithContext(ctx, "POST", backend, bytes.NewReader(body))
+				backendReq, err := http.NewRequestWithContext(reqCtx, "POST", backend, bytes.NewReader(body))
 				if err != nil {
 					s.logger.Error("backend call failed", zap.Error(err), zap.String("url", backend))
 					return

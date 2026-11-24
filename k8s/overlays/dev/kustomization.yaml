@@ -1,20 +1,20 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Inherit all core resources from the base directory
+namespace: podinfo-dev
+
 resources:
   - ../../base
 
-# Add the dev environment label to everything
-commonLabels:
-  env: dev
+labels:
+  - pairs:
+      env: dev
+    includeSelectors: false
 
-# Define the image explicitly for dev
 images:
   - name: ghcr.io/gg-push/secure-k8s-pipeline
-    newTag: dev-latest
+    newTag: latest
 
-# Patch the deployment to have only 1 replica in Dev
 patches:
   - target:
       kind: Deployment
@@ -23,3 +23,10 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 1
+  - target:
+      kind: HTTPRoute
+      name: podinfo-route
+    patch: |-
+      - op: replace
+        path: /spec/hostnames/0
+        value: dev.podinfo.local

@@ -2,7 +2,8 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'k8s-cluster'
-    # IMPORTANT: Change this IP to the Tailscale IP (100.x.x.x) of your K8s node/service on VPS 1.
+  - job_name: "podinfo"
+    metrics_path: /metrics
+    # Point at the Tailscale MagicDNS hostname or private Tailscale IP exposed by k8s/base/service.yaml.
     static_configs:
-      - targets: ['100.x.x.x:8080']
+      - targets: ["<TAILSCALE_PODINFO_HOST>:80"]

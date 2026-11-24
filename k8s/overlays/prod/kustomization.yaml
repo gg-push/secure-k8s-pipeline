@@ -1,20 +1,21 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Inherit all core resources from the base directory
+namespace: podinfo-prod
+
 resources:
   - ../../base
+  - pdb.yaml
 
-# Add the prod environment label to everything
-commonLabels:
-  env: prod
+labels:
+  - pairs:
+      env: prod
+    includeSelectors: false
 
-# Define the image explicitly for prod
 images:
   - name: ghcr.io/gg-push/secure-k8s-pipeline
     newTag: latest
 
-# Patch the deployment to have 3 replicas in Prod
 patches:
   - target:
       kind: Deployment

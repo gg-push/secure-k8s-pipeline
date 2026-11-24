@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Dummy test JWT tokens and default local dev fallback in upstream podinfo"
+paths = [
+  '''app/pkg/api/grpc/token_test\.go''',
+  '''app/pkg/api/http/token_test\.go''',
+]
+regexes = [
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9''',
+]

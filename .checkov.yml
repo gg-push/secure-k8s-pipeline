@@ -1,0 +1,16 @@
+framework:
+  - kubernetes
+  - terraform
+  - dockerfile
+  - github_actions
+
+skip-check:
+  # Scratch production container intentionally has no shell for Docker HEALTHCHECK; K8s /healthz and /readyz probes verify health.
+  - CKV_DOCKER_2
+  # Base Kustomize manifests omit metadata.namespace so dev and prod overlays cleanly assign podinfo-dev and podinfo-prod.
+  - CKV_K8S_21
+  # Kustomize overlays manage image tags dynamically; CI builds once, scans with Trivy, and signs immutable digests with Cosign.
+  - CKV_K8S_14
+  - CKV_K8S_43
+  # Container runs as non-root UID 1000 matching app/Dockerfile USER 1000:1000.
+  - CKV_K8S_40

@@ -1,20 +1,14 @@
 terraform {
+  required_version = ">= 1.10"
+
   required_providers {
     helm = {
       source  = "hashicorp/helm"
       version = "~> 2.11"
     }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.23"
-    }
     null = {
       source  = "hashicorp/null"
       version = "~> 3.2"
-    }
-    local = {
-      source  = "hashicorp/local"
-      version = "~> 2.4"
     }
   }
 }
@@ -35,7 +29,8 @@ locals {
 # to re-expose to pods via a hostPath volume (see the tetragon helm_release below).
 resource "null_resource" "k3d_cluster" {
   triggers = {
-    cluster_name = local.cluster_name
+    cluster_name    = local.cluster_name
+    kubeconfig_path = local.kubeconfig_path
   }
 
   provisioner "local-exec" {
@@ -53,26 +48,21 @@ resource "null_resource" "k3d_cluster" {
 
   provisioner "local-exec" {
     when    = destroy
-    command = "k3d cluster delete ${self.triggers.cluster_name}"
+    command = "k3d cluster delete ${self.triggers.cluster_name} && rm -f ${self.triggers.kubeconfig_path}"
   }
 }
 
-# 2. Tell Helm and K8s providers how to talk to the new cluster
+# 2. Tell Helm provider how to talk to the new cluster
 #
 # NOTE: because k3d isn't a native Terraform resource (no provider exposes cluster
-# endpoint/certs as computed attributes the way tehcyx/kind did), these providers
-# can't graph-depend on null_resource.k3d_cluster the way they depended on
-# kind_cluster.default before. Run `terraform apply -target=null_resource.k3d_cluster`
-# once to create the cluster and kubeconfig file, then a plain `terraform apply` to
-# install everything onto it. See terraform-notes.md for the full explanation.
+# endpoint/certs as computed attributes), run:
+#   terraform apply -target=null_resource.k3d_cluster
+# once to create the cluster and kubeconfig file, then a plain `terraform apply`
+# to install all charts and apply the GitOps bootstrap manifests.
 provider "helm" {
   kubernetes {
     config_path = local.kubeconfig_path
   }
-}
-
-provider "kubernetes" {
-  config_path = local.kubeconfig_path
 }
 
 # 3. Install ArgoCD automatically via Helm
@@ -82,19 +72,27 @@ resource "helm_release" "argocd" {
   chart            = "argo-cd"
   namespace        = "argocd"
   create_namespace = true
-  version          = "5.46.0" # Stable version
+  version          = "10.18.3"
 
   depends_on = [null_resource.k3d_cluster]
 }
 
-# 4. Install Tetragon (eBPF Security) automatically via Helm
+# 4. Install Sealed Secrets controller via Helm (kube-system)
+resource "helm_release" "sealed_secrets" {
+  name       = "sealed-secrets-controller"
+  repository = "oci://registry-1.docker.io/bitnamicharts"
+  chart      = "sealed-secrets"
+  namespace  = "kube-system"
+  version    = "2.22.0"
+
+  depends_on = [null_resource.k3d_cluster]
+}
+
+# 5. Install Tetragon (eBPF Security) automatically via Helm
 #
-# Pinned above 1.1.0 (this project's original pin): on a recent host kernel, 1.1.0's
-# precompiled multi-kprobe BPF object fails the in-kernel verifier ("load program:
-# invalid argument") and the TracingPolicy never actually attaches. 1.7.0 is the
-# latest stable chart/app version and loads cleanly. Its values schema changed too
-# (e.g. tetragon.processAncestors.enabled is now required), so if you bump this
-# again, don't just `helm upgrade --reuse-values` across a major version jump.
+# Pinned at 1.7.0: on recent host kernels, 1.1.0's precompiled multi-kprobe BPF
+# object fails the in-kernel verifier ("load program: invalid argument") and the
+# TracingPolicy never attaches. 1.7.0 loads cleanly.
 resource "helm_release" "tetragon" {
   name       = "tetragon"
   repository = "https://helm.cilium.io"
@@ -103,11 +101,7 @@ resource "helm_release" "tetragon" {
   version    = "1.7.0"
 
   # Re-expose the node's debugfs/tracefs (bind-mounted from the host at cluster
-  # creation, see null_resource.k3d_cluster) into the tetragon pod itself. Without
-  # this the agent crash-loops with "neither debugfs nor tracefs are mounted".
-  # extraHostPathMounts alone is enough: the chart's tetragon container template
-  # already ranges over it to add matching volumeMounts, so setting
-  # tetragon.extraVolumeMounts too would duplicate the mount paths.
+  # creation, see null_resource.k3d_cluster) into the tetragon pod itself.
   values = [
     yamlencode({
       extraHostPathMounts = [
@@ -120,13 +114,10 @@ resource "helm_release" "tetragon" {
   depends_on = [null_resource.k3d_cluster]
 }
 
-# 5. Install Envoy Gateway Controller (Automatically installs Gateway API CRDs)
+# 6. Install Envoy Gateway Controller (Automatically installs Gateway API CRDs)
 #
-# Pinned above v1.1.0 (this project's original pin): recent k3s ships a Traefik CRD
-# bundle where TLSRoute/TCPRoute/UDPRoute have moved past the v1alpha2 API that
-# envoy-gateway v1.1.0 hard-codes, so it crash-loops with
-# "no matches for kind TLSRoute in version gateway.networking.k8s.io/v1alpha2".
-# v1.8.3 is the latest stable release and targets the current Gateway API versions.
+# Pinned at v1.8.3: recent k3s ships a Traefik CRD bundle where TLSRoute/TCPRoute/
+# UDPRoute have moved past the v1alpha2 API that envoy-gateway v1.1.0 hard-coded.
 resource "helm_release" "envoy_gateway" {
   name             = "eg"
   repository       = "oci://docker.io/envoyproxy"
@@ -136,4 +127,26 @@ resource "helm_release" "envoy_gateway" {
   version          = "v1.8.3"
 
   depends_on = [null_resource.k3d_cluster]
+}
+
+# 7. Hand over cluster GatewayClass and root ArgoCD Application (zero manual kubectl)
+resource "null_resource" "bootstrap_gitops" {
+  triggers = {
+    gatewayclass_sha = filesha256("${path.module}/../k8s/cluster/gatewayclass.yaml")
+    argocd_app_sha   = filesha256("${path.module}/../k8s/argocd-app.yaml")
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -euo pipefail
+      KUBECONFIG=${local.kubeconfig_path} kubectl apply -f ${path.module}/../k8s/cluster/gatewayclass.yaml
+      KUBECONFIG=${local.kubeconfig_path} kubectl apply -f ${path.module}/../k8s/argocd-app.yaml
+    EOT
+  }
+
+  depends_on = [
+    helm_release.argocd,
+    helm_release.envoy_gateway,
+    helm_release.sealed_secrets,
+  ]
 }

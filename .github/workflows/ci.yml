@@ -2,96 +2,83 @@ name: Enterprise SecOps Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
+permissions:
+  contents: read
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  GO_VERSION: '1.26'
+  GO_VERSION: "1.26"
 
 jobs:
-  # Phase 1: Test & Static Analysis
+  # Phase 1: Secret Scan, Go Vet, Tests & SAST
   sast-and-test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./app
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Required for Gitleaks to scan history
-          
+
       - name: Secret Scanning (Gitleaks)
         if: ${{ !env.ACT }}
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: app/go.sum
-          
+
       - name: Run go vet (Native Linter)
+        working-directory: ./app
         run: go vet ./...
-          
-      - name: Run Unit Tests
-        run: go test -v ./...
-        
-      - name: Run gosec (SAST)
-        uses: securego/gosec@master
-        with:
-          args: ./...
-          
-  # Phase 1.5: Infrastructure as Code Scan
-  iac-scan:
+
+      - name: Run Unit Tests (Race Detector)
+        working-directory: ./app
+        run: go test -race -v ./...
+
+      - name: Run gosec (Go SAST)
+        working-directory: ./app
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 ./...
+
+  # Phase 1.5: IaC, Kustomize & Manifest Security Scan
+  iac-and-manifests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      - name: Run Checkov (IaC SAST)
-        uses: bridgecrewio/checkov-action@master
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Validate Terraform
+        run: |
+          terraform -chdir=terraform fmt -check
+          terraform -chdir=terraform init -backend=false -input=false
+          terraform -chdir=terraform validate
+
+      - name: Validate Kustomize Overlays
+        run: |
+          kubectl kustomize k8s/overlays/dev > /dev/null
+          kubectl kustomize k8s/overlays/prod > /dev/null
+
+      - name: Run Checkov (IaC & K8s SAST)
+        uses: bridgecrewio/checkov-action@v12.1347.0
         with:
           directory: .
-          framework: all
-          soft_fail: true
-  # Phase 2: Build & Container Scan
-  build-and-sca:
-    needs: [sast-and-test, iac-scan]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        
-      - name: Build local image for testing
-        uses: docker/build-push-action@v5
-        with:
-          context: ./app
-          push: false
-          load: true
-          tags: ${{ env.IMAGE_NAME }}:test
-          
-      - name: Run Trivy Scanner (SCA)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: '${{ env.IMAGE_NAME }}:test'
-          format: 'table'
-          exit-code: '1'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
-          
-  # Phase 3: Publish to Registry
-  publish:
-    needs: build-and-sca
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+          config_file: .checkov.yml
+          soft_fail: false
+
+  # Phase 2 & 3: Single-Build, Trivy SCA, Digest Push, SBOM & Cosign Attestation
+  build-scan-publish:
+    needs: [sast-and-test, iac-and-manifests]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -100,30 +87,69 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Image Once for Scan & Publish
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          push: false
+          load: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Run Trivy Scanner (SCA)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
       - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Build and Push Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./app
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-      - name: Generate SBOM (Software Bill of Materials)
+      - name: Push Verified Image & Capture Immutable Digest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: push
+        run: |
+          IMAGE_SHA="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          docker push "$IMAGE_SHA"
+          docker push "$IMAGE_LATEST"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE_SHA")
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate SPDX SBOM
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          image: ${{ steps.push.outputs.digest }}
+          output-file: sbom.spdx.json
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
-          
+
+      - name: Upload SBOM Artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-spdx
+          path: sbom.spdx.json
+
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3.5.0
-        
-      - name: Sign Docker Image (Zero Trust)
-        run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: sigstore/cosign-installer@v4.1.3
+
+      - name: Sign Immutable Image Digest (Zero Trust)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: cosign sign --yes "${{ steps.push.outputs.digest }}"

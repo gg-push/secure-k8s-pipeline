@@ -1,6 +1,6 @@
 # Secure K8s Deployment Pipeline
 
-This project demonstrates a production-grade, secure CI/CD pipeline and K8s deployment for a Go microservice.
+Production-grade DevSecOps CI/CD pipeline, GitOps deployment, and runtime-hardened Kubernetes stack for a Go microservice (`podinfo`).
 
 ## Enterprise Architecture
 
@@ -11,151 +11,99 @@ graph LR
 
     subgraph CI Pipeline
         Gitleaks[Gitleaks: Secret Scan]
-        Checkov[Checkov: IaC Terraform/K8s Scan]
-        Gosec[gosec: Go Application SAST]
-        Trivy[Trivy: Container SCA Scan]
-        SBOM[Anchore: Generate SBOM]
-        Cosign[Cosign: Zero-Trust Signing]
+        GoSec[go vet / test -race / gosec]
+        Checkov[Checkov + TF + Kustomize Gate]
+        Trivy[Trivy: Container SCA]
+        SBOM[Anchore: SPDX SBOM]
+        Cosign[Cosign: Keyless Digest Sign]
     end
 
-    CI --> Gitleaks
-    Gitleaks --> Checkov
-    Checkov --> Gosec
-    Gosec --> Trivy
-    Trivy --> SBOM
-    SBOM --> Cosign
-    Cosign -->|Push Verified Image| GHCR[GitHub Container Registry]
+    CI --> Gitleaks --> GoSec --> Checkov --> Trivy --> SBOM --> Cosign
+    Cosign -->|Push Verified Digest| GHCR[GitHub Container Registry]
 
-    Argo[ArgoCD GitOps] -->|Polls| Git
+    Argo[ArgoCD GitOps] -->|Polls k8s/overlays/prod| Git
     Argo -->|Deploys to k3d| K8s[Kubernetes Cluster]
 
     User[External User] -->|Port 80| Envoy[Envoy Edge Gateway]
     Envoy -->|HTTPRoute| Pod[Podinfo Go Microservice]
-    
-    Tetragon[Cilium Tetragon eBPF] -->|Monitors| Pod
+
+    Tetragon[Cilium Tetragon eBPF] -->|TracingPolicyNamespaced| Pod
 ```
 
-## Phase 1: The Application & Dockerization
+## Phase 1: Application & Hardened Multi-Stage Container
 
-**The Base Application**
-We use `stefanprodan/podinfo` (raw source only). It is an industry-standard Cloud Native application that exposes Prometheus metrics, health probes, and structured logging.
+- **Base Application**: Go microservice (`app/`) exposing `/healthz`, `/readyz`, and Prometheus `/metrics` on port `9898`.
+- **Multi-Stage `FROM scratch` Build** ([app/Dockerfile](app/Dockerfile)):
+  1. **Builder (`golang:1.26-alpine`)**: Installs CA certificates and builds a statically linked multi-arch binary (`CGO_ENABLED=0`, `-trimpath -ldflags="-w -s"`).
+  2. **Runtime (`FROM scratch`)**: Copies only `/podinfo`, `/ui`, and `/etc/ssl/certs/ca-certificates.crt`, running as non-root `USER 1000:1000` with zero shell or package manager attack surface.
 
-**The Multi-Stage Docker Build**
-Instead of using a standard base image which is large and vulnerable, we use a multi-stage approach:
-1. **Builder Stage**: `golang:alpine` compiles Go code into a single statically-linked binary.
-2. **Production Stage**: `scratch` (empty container). We copy only the binary and UI assets.
-**Result**: ~10MB image, virtually zero OS attack surface.
+## Phase 2: Shift-Left SecOps CI Pipeline
 
-## Phase 2: Enterprise SecOps CI Pipeline
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) enforces strict, blocking security gates with least-privilege permissions (`contents: read` at workflow level):
 
-**Tool Choice: GitHub Actions vs Jenkins**
-We chose GitHub Actions over Jenkins because it is a fully managed SaaS (zero server maintenance or plugin hell), uses clean declarative YAML instead of Groovy scripts, and offers seamless integration with the repository.
+1. **Secret Scanning (`Gitleaks`)**: Scans full Git history (`fetch-depth: 0`) using [`.gitleaks.toml`](.gitleaks.toml) to allowlist only documented dummy unit-test tokens.
+2. **Go Static Analysis & Tests**: Runs `go vet ./...`, `go test -race -v ./...`, and `gosec` directly inside `./app`.
+3. **IaC & Manifest Gate**: Validates `terraform fmt -check`, `terraform validate`, `kubectl kustomize` builds for both `dev` and `prod` overlays, and runs **Checkov** (`soft_fail: false` via [`.checkov.yml`](.checkov.yml)).
+4. **Single-Build & Trivy SCA**: Builds the image once (`:<sha>` and `:latest`) and fails the pipeline if `CRITICAL` or `HIGH` OS/library CVEs exist.
+5. **Immutable Digest Push, SBOM & Cosign**: On `main`, pushes the exact scanned image, captures its `@sha256:...` digest, uploads an SPDX SBOM artifact (`sbom.spdx.json`), and signs the immutable digest via keyless **Cosign**.
 
-Our GitHub Action (`.github/workflows/ci.yml`) implements "Shift-Left" security. It blocks bad code from ever reaching the registry.
+## Phase 3: Pod Security Standard (Restricted) & Network Isolation
 
-**Pipeline Stages:**
-1. **Linting**: Native `go vet` enforces clean code. *(Note: We use native tooling because third-party linters like `golangci-lint` often lag behind bleeding-edge Go language releases like 1.26).* 
-2. **Unit Tests**: Verifies logic.
-3. **SAST (Static Application Security Testing)**: 
-   - We use `Gitleaks` to aggressively scan the entire Git history for leaked passwords. We implement a strict `.gitleaksignore` configuration to bypass dummy test tokens.
-   - We use `gosec` to scan the raw Go code for hardcoded credentials, SQL injections, and bad cryptography.
-   - *Why gosec?* It is purpose-built and highly optimized specifically for Go.
-   - *Alternatives*: We could use **Semgrep** or **SonarQube** for this phase. Semgrep is excellent for multi-language repositories, but for a pure Go microservice, `gosec` is lighter and faster.
-4. **Build**: Executes multi-stage Docker build.
-5. **SCA (Software Composition Analysis)**: `Trivy` scans the final Docker image. Fails the build if `CRITICAL` or `HIGH` vulnerabilities exist.
-6. **Publish**: Pushes verified image to GHCR if merged to `main`.
+All base manifests live in [`k8s/base/`](k8s/base/):
+- **Pod & Container Hardening** ([`deployment.yaml`](k8s/base/deployment.yaml)): `automountServiceAccountToken: false`, `runAsNonRoot: true`, `runAsUser/Group/fsGroup: 1000`, `seccompProfile: RuntimeDefault`, `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: ["ALL"]`, with `emptyDir` mounts at `/tmp` and `/data`.
+- **Zero-Trust NetworkPolicy** ([`networkpolicy.yaml`](k8s/base/networkpolicy.yaml)): Restricts ingress on TCP `9898` to same-namespace pods plus `envoy-gateway-system`, `tailscale`, and `monitoring` namespaces, and restricts egress to `kube-system` DNS (`53`).
+- **Availability (`prod`)**: [`k8s/overlays/prod/pdb.yaml`](k8s/overlays/prod/pdb.yaml) enforces `PodDisruptionBudget` (`minAvailable: 1`) across the 3 production replicas.
 
-## Phase 3: Kubernetes Deployment
+## Phase 4: GitOps Secrets Management (Sealed Secrets)
 
-We provide production-ready K8s manifests in the `k8s/` directory.
-- **Security Context**: Enforces `runAsNonRoot` to prevent privilege escalation if container is compromised.
-- **Resource Quotas**: Defines CPU/Memory limits to prevent "noisy neighbor" crashes.
-- **Health Probes**: Uses `/healthz` and `/readyz` endpoints. K8s will only send traffic when app is fully ready. Zero-downtime rolling updates.
+Terraform installs the **Bitnami Sealed Secrets** controller in `kube-system`. Generate and encrypt a real `PODINFO_JWT_SECRET` for either environment using [`scripts/seal-secret.sh`](scripts/seal-secret.sh):
 
-## Phase 4: GitOps Secrets Management
+```bash
+chmod +x scripts/seal-secret.sh
+./scripts/seal-secret.sh prod
+```
 
-**Tool Choice: Bitnami Sealed Secrets**
-In a true GitOps workflow, *everything* must live in Git—including secrets. However, standard K8s `Secret` objects are merely base64 encoded and unsafe for Git repositories.
+Then add `- sealed-secret.yaml` to `k8s/overlays/prod/kustomization.yaml` and commit. [`deployment.yaml`](k8s/base/deployment.yaml) references `podinfo-secrets` (`optional: true`) so pods start cleanly before sealing and automatically load the decrypted secret once applied.
 
-We solve this using **Sealed Secrets**:
-- **Asymmetric Encryption**: We use the `kubeseal` CLI to encrypt secrets locally using a public key.
-- **Safe Storage**: The resulting `SealedSecret` is fully encrypted and 100% safe to commit to Git. Hackers cannot read it.
-- **Secure Decryption**: Only the controller inside our specific K8s cluster holds the private key to decrypt it back into a normal K8s Secret at runtime.
+## Phase 5–7: ArgoCD GitOps, Gateway API & Multi-Env Kustomize
 
-## Phase 5: Continuous Deployment (GitOps)
+- **Cluster-Scoped GatewayClass**: [`k8s/cluster/gatewayclass.yaml`](k8s/cluster/gatewayclass.yaml) defines the Envoy GatewayClass once at the cluster level.
+- **Namespace-Isolated Overlays**:
+  - `k8s/overlays/dev` → namespace `podinfo-dev`, `1` replica, hostname `dev.podinfo.local`.
+  - `k8s/overlays/prod` → namespace `podinfo-prod`, `3` replicas, `PodDisruptionBudget`, hostname `podinfo.local`.
+- **ArgoCD Handover**: [`k8s/argocd-app.yaml`](k8s/argocd-app.yaml) deploys `k8s/overlays/prod` into `podinfo-prod` with `prune: true`, `selfHeal: true`, and `CreateNamespace=true`.
 
-**Tool Choice: ArgoCD**
-To achieve true GitOps, we do not run `kubectl apply` manually, nor do we let GitHub Actions push changes to the cluster. Instead, we use a pull-based model with ArgoCD.
+## Phase 8: Namespaced eBPF Runtime Security (Cilium Tetragon)
 
-- **ArgoCD Application**: The `k8s/argocd-app.yaml` manifest tells ArgoCD to constantly monitor this Git repository.
-- **Auto-Sync**: When a new change is merged to `main`, ArgoCD detects the drift and automatically synchronizes the K8s cluster state to match Git.
-- **Self-Healing**: If someone manually edits a K8s resource via CLI, ArgoCD will overwrite their changes to ensure Git remains the single source of truth.
+[`k8s/base/tetragon-policy.yaml`](k8s/base/tetragon-policy.yaml) uses **`TracingPolicyNamespaced`** scoped strictly via `podSelector: { matchLabels: { app: podinfo } }` in the target namespace (`podinfo-dev` or `podinfo-prod`). Any unexpected attempt inside a `podinfo` container to open `/etc/shadow` or `execve` `/bin/sh`, `/bin/bash`, `curl`, or `wget` triggers kernel-level `SIGKILL` without impacting system or ArgoCD pods.
 
-## Phase 6: Next-Gen Routing (Gateway API)
+## Phase 9: Hardened Monitoring Stack (Prometheus + Grafana over Tailscale)
 
-Instead of using legacy `Ingress`, we use the modern Kubernetes **Gateway API** (`HTTPRoute`) powered by Envoy Proxy.
-- **Decoupled Architecture**: Cluster admins manage the `Gateway` infrastructure, while developers independently manage the `HTTPRoute` application logic.
-- **Advanced Traffic Management**: Natively supports canary deployments, weight-based traffic splitting, and header matching without relying on ugly vendor-specific annotations.
+[`monitoring/`](monitoring/) provides a decoupled Docker Compose stack with pinned versions (`prom/prometheus:v3.2.1`, `grafana/grafana:11.5.2`), `no-new-privileges:true`, read-only config mounts, localhost/Tailscale binding (`MONITORING_BIND_IP`), auto-provisioned Prometheus datasource, and required admin credentials:
 
-### Installation (Automated via Terraform)
-Gateway API does not come pre-installed in standard Kubernetes clusters. In our Enterprise Architecture, this is fully automated. 
-Our Terraform code (`terraform/main.tf`) uses the Helm provider to seamlessly install the Envoy Edge Proxy and the underlying Gateway API CRDs alongside the cluster bootstrap. *(See `k8s-notes.md` for a technical deep-dive on troubleshooting Helm CRD lifecycle conflicts during manual vs automated installations).* 
+```bash
+cd monitoring
+cp .env.example .env
+# Edit .env with a strong GRAFANA_ADMIN_PASSWORD (and Tailscale bind IP if remote)
+# Update monitoring/prometheus.yml with your podinfo Tailscale MagicDNS host or IP
+docker compose up -d
+```
 
+## How to Deploy Locally ($0 via k3d + Terraform)
 
-## Phase 7: Kustomize (The Glue)
+Requires Docker, `k3d`, `kubectl`, and Terraform `>= 1.10`.
 
-We use `kustomization.yaml` to group all Kubernetes manifests.
-- **Why?** It allows us to apply `commonLabels` to all resources simultaneously and dynamically override Docker image tags per environment (Dev vs Prod) without duplicating raw YAML files. ArgoCD natively detects and builds Kustomize.
-
-## Future Enhancements
-While this pipeline is production-grade, a massive enterprise scale-out would add:
-- **Infrastructure Security Scanning (Checkov)**: Analyze raw Terraform code in the GitHub Action and block deployment if security rules (like open firewalls) are violated.
-- **Multi-Environment GitOps**: Split the `k8s/` folder into `base/`, `overlays/dev`, and `overlays/prod` to demonstrate dynamic environment promotion.
-- **Horizontal Pod Autoscaler (HPA)**: Auto-scale pod replicas from 2 to 50 dynamically based on CPU/Memory usage.
-- **Cloud Provider IaC (Terraform)**: Expand our local `k3d` Terraform module to provision a real AWS EKS cluster and VPC network.
-- **ServiceMonitor (Prometheus)**: Automatically tell Prometheus to scrape the `/metrics` endpoint built into our Go app.
-
-## How to Deploy (Run it Yourself)
-
-To see this pipeline in action, follow these exact steps:
-
-1. **GitHub Setup**: 
-   - Create a new GitHub repository.
-   - Run `git init`, commit this folder, and `git push`.
-2. **Registry Setup**: 
-   - We push images to **GHCR (GitHub Container Registry)** instead of DockerHub. 
-   - *Why?* GHCR integrates natively with GitHub Actions. It automatically authenticates using the ephemeral, built-in `GITHUB_TOKEN`. You do not need to create third-party accounts, generate passwords, or manage secrets manually. It is significantly more secure and requires zero setup.
-3. **Infrastructure as Code (Terraform)**: 
-   - Edit `k8s/argocd-app.yaml` and change `repoURL` to point to your new GitHub repo.
-   - Navigate to the `terraform/` directory.
-   - Run `terraform init`, then `terraform apply -target=null_resource.k3d_cluster -auto-approve` to bootstrap the cluster, then `terraform apply -auto-approve` to install everything onto it. *(Two stages because k3d has no native Terraform provider — see `terraform-notes.md` for why.)*
-   - *What happens?* Terraform automatically spins up a free Kubernetes cluster (using `k3d`), installs ArgoCD via Helm, and automatically applies the root `argocd-app.yaml` handover file. Zero manual `kubectl` commands required.
-4. **Watch the Magic**: 
-   - ArgoCD wakes up, connects to your Git repo, reads `kustomization.yaml`, and automatically deploys the Gateway, Service, Deployment, and Secrets.
-
-## Enterprise Note: Private Repositories
-In a real-world corporate environment, the GitHub repository will be **Private**. This introduces two authentication hurdles that this portfolio architecture bypasses for simplicity:
-1. **ArgoCD Git Access**: ArgoCD requires a GitHub Personal Access Token (PAT) or SSH Deploy Key stored as a Kubernetes `Secret` to read the private YAML manifests.
-2. **K8s Image Pull**: The Kubernetes `Deployment` requires an `imagePullSecrets` configuration to authenticate with the private GHCR registry and pull the Docker image.
-
-## Phase 8: eBPF Runtime Security (Cilium Tetragon)
-
-We inject **Tetragon** directly into the Kubernetes Node's host kernel via Helm. 
-- **Zero-Overhead Observability**: Watches every system call and network packet dynamically.
-- **Surgical Execution (`TracingPolicy`)**: We define YAML policies that automatically trigger `SIGKILL` if a container executes unauthorized commands (e.g., reading `/etc/shadow`), instantly terminating the hacker's process before the kernel executes it.
-
-## Phase 9: Observability & Monitoring (VPS 2)
-In an enterprise architecture, monitoring is decoupled from the application cluster. We use a dedicated server (VPS 2) running Docker Compose.
-
-### The Architecture (Zero Trust Networking)
-- **VPS 1 (App Cluster)**: Runs K3s, ArgoCD, and the application. Connected to the Tailscale VPN mesh.
-- **VPS 2 (Monitoring)**: Runs Docker Compose (Prometheus + Grafana). Connected to the Tailscale VPN mesh.
-- **The Connection**: Prometheus securely scrapes metrics from VPS 1 over the encrypted Tailscale network. Zero public ports are opened on VPS 1.
-
-### Deployment Steps (VPS 2)
-1. Install Docker and Tailscale on VPS 2.
-2. Copy the `monitoring/` directory from this repository to VPS 2.
-3. **CRITICAL CHANGE**: Edit `monitoring/prometheus.yml`. Change the `targets: ['100.x.x.x:8080']` IP to match the private Tailscale IP of your K8s cluster/service on VPS 1.
-4. Run `docker compose up -d`.
-5. Access Grafana at `http://<VPS_2_PUBLIC_IP>:3000` (Default login: `admin`/`admin`).
-6. Add Prometheus as a Data Source (`http://prometheus:9090`) and import the official K8s Dashboard (ID: `315`).
+1. **Bootstrap the `k3d` cluster** (bind-mounts `/sys/kernel/debug` and `/sys/kernel/tracing` for Tetragon):
+   ```bash
+   cd terraform
+   terraform init
+   terraform apply -target=null_resource.k3d_cluster -auto-approve
+   ```
+2. **Install ArgoCD, Sealed Secrets, Tetragon, Envoy Gateway, and apply GitOps manifests**:
+   ```bash
+   terraform apply -auto-approve
+   ```
+3. **Teardown when finished** (deletes `k3d` cluster and generated kubeconfig):
+   ```bash
+   terraform destroy -auto-approve
+   ```

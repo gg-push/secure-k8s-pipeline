@@ -14,15 +14,40 @@ spec:
       labels:
         app: podinfo
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: podinfo
           image: ghcr.io/gg-push/secure-k8s-pipeline:latest
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           ports:
-            - containerPort: 9898
+            - name: http
+              containerPort: 9898
+              protocol: TCP
+          env:
+            - name: PODINFO_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: podinfo-secrets
+                  key: jwt-secret
+                  optional: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
           resources:
             requests:
               cpu: 10m
@@ -33,12 +58,17 @@ spec:
           livenessProbe:
             httpGet:
               path: /healthz
-              port: 9898
+              port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /readyz
-              port: 9898
+              port: http
             initialDelaySeconds: 5
             periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
