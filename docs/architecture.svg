@@ -1,0 +1,241 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 620" width="1140" height="620" role="img" aria-labelledby="title desc">
+  <title id="title">Zero-Trust DevSecOps Kubernetes Architecture</title>
+  <desc id="desc">Architecture diagram for secure-k8s-pipeline showing Shift-Left GitHub Actions CI (Gitleaks, go vet, test -race, gosec, Terraform, Kustomize, Checkov, Trivy, SBOM, Cosign), GHCR, ArgoCD GitOps into k3d with Envoy Gateway, Sealed Secrets, Cilium Tetragon TracingPolicyNamespaced, NetworkPolicy, and decoupled Docker Compose Prometheus and Grafana over Tailscale.</desc>
+
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#545B64"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#147EBA"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#248814"/>
+    </marker>
+    <marker id="arr-red" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#DD344C"/>
+    </marker>
+    <marker id="arr-purple" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#7C3AED"/>
+    </marker>
+  </defs>
+
+  <!-- Clean white diagram canvas -->
+  <rect width="1140" height="620" fill="#FFFFFF"/>
+
+  <g font-family="Helvetica, Arial, -apple-system, sans-serif">
+    <!-- ==================== TOP LANE: CI/CD & SUPPLY CHAIN ==================== -->
+    <!-- Developer -->
+    <g transform="translate(30,56)">
+      <rect width="98" height="72" rx="6" fill="#F8FAFC" stroke="#24292F" stroke-width="1.4"/>
+      <circle cx="49" cy="24" r="6" fill="none" stroke="#24292F" stroke-width="1.8"/>
+      <path d="M37 42 c0 -6.5 5.4 -10 12 -10 s12 3.5 12 10" fill="none" stroke="#24292F" stroke-width="1.8" stroke-linecap="round"/>
+      <text x="49" y="60" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Developer</text>
+    </g>
+
+    <line x1="128" y1="92" x2="168" y2="92" stroke="#545B64" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="148" y="83" text-anchor="middle" font-size="9.5" fill="#545B64">push</text>
+
+    <!-- GitHub Repository -->
+    <g transform="translate(174,56)">
+      <rect width="128" height="72" rx="6" fill="#FFFFFF" stroke="#24292F" stroke-width="1.5"/>
+      <rect width="128" height="22" rx="5" fill="#24292F"/>
+      <rect y="14" width="128" height="8" fill="#24292F"/>
+      <text x="64" y="15" text-anchor="middle" font-size="10.5" font-weight="700" fill="#FFFFFF">GitHub Repo</text>
+      <text x="64" y="42" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">secure-k8s-pipeline</text>
+      <text x="64" y="58" text-anchor="middle" font-size="10" fill="#545B64">main · Pull Requests</text>
+    </g>
+
+    <line x1="302" y1="92" x2="342" y2="92" stroke="#147EBA" stroke-width="1.5" marker-end="url(#arr-blue)"/>
+    <text x="322" y="83" text-anchor="middle" font-size="9.5" fill="#147EBA">CI</text>
+
+    <!-- GitHub Actions CI Container -->
+    <rect x="348" y="20" width="496" height="136" rx="6" fill="#F8FBFE" stroke="#147EBA" stroke-width="1.4"/>
+    <rect x="348" y="20" width="238" height="24" rx="4" fill="#147EBA"/>
+    <text x="467" y="36" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF">GitHub Actions (Least Privilege)</text>
+
+    <!-- CI Gate 1 -->
+    <rect x="364" y="56" width="144" height="84" rx="5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+    <text x="436" y="75" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">1. SAST &amp; Tests</text>
+    <text x="436" y="95" text-anchor="middle" font-size="10" fill="#545B64">Gitleaks (.gitleaks.toml)</text>
+    <text x="436" y="111" text-anchor="middle" font-size="10" fill="#545B64">go vet · go test -race</text>
+    <text x="436" y="127" text-anchor="middle" font-size="10" fill="#545B64">gosec (./cmd/podinfo, ./pkg)</text>
+
+    <line x1="508" y1="98" x2="522" y2="98" stroke="#545B64" stroke-width="1.3" marker-end="url(#arr)"/>
+
+    <!-- CI Gate 2 -->
+    <rect x="528" y="56" width="144" height="84" rx="5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+    <text x="600" y="75" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">2. IaC &amp; Manifests</text>
+    <text x="600" y="95" text-anchor="middle" font-size="10" fill="#545B64">terraform fmt / validate</text>
+    <text x="600" y="111" text-anchor="middle" font-size="10" fill="#545B64">kubectl kustomize</text>
+    <text x="600" y="127" text-anchor="middle" font-size="10" fill="#DD344C" font-weight="700">Checkov (soft_fail: false)</text>
+
+    <line x1="672" y1="98" x2="686" y2="98" stroke="#545B64" stroke-width="1.3" marker-end="url(#arr)"/>
+
+    <!-- CI Gate 3 -->
+    <rect x="692" y="56" width="136" height="84" rx="5" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+    <text x="760" y="75" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">3. Build &amp; SCA</text>
+    <text x="760" y="95" text-anchor="middle" font-size="10" fill="#545B64">Single Docker build</text>
+    <text x="760" y="111" text-anchor="middle" font-size="10" fill="#545B64">FROM scratch (UID 1000)</text>
+    <text x="760" y="127" text-anchor="middle" font-size="10" fill="#DD344C" font-weight="700">Trivy (CRIT / HIGH)</text>
+
+    <line x1="844" y1="92" x2="896" y2="92" stroke="#248814" stroke-width="1.5" marker-end="url(#arr-green)"/>
+    <text x="870" y="83" text-anchor="middle" font-size="9.5" fill="#248814">main</text>
+
+    <!-- GHCR + Cosign -->
+    <rect x="902" y="34" width="210" height="114" rx="6" fill="#F2F8F0" stroke="#248814" stroke-width="1.5"/>
+    <rect x="902" y="34" width="210" height="24" rx="5" fill="#248814"/>
+    <rect x="902" y="50" width="210" height="8" fill="#248814"/>
+    <text x="1007" y="50" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF">GHCR + Supply Chain</text>
+    <text x="1007" y="79" text-anchor="middle" font-size="10.5" font-weight="700" fill="#232F3E">ghcr.io/gg-push/secure-k8s-pipeline</text>
+    <text x="1007" y="98" text-anchor="middle" font-size="10" fill="#545B64">Immutable @sha256 digest</text>
+    <text x="1007" y="115" text-anchor="middle" font-size="10" fill="#545B64">SPDX SBOM Artifact (Anchore)</text>
+    <text x="1007" y="132" text-anchor="middle" font-size="10" font-weight="700" fill="#248814">Cosign Keyless OIDC Sign</text>
+
+    <!-- ==================== BOTTOM-LEFT: KUBERNETES CLUSTER ==================== -->
+    <rect x="28" y="192" width="796" height="408" rx="6" fill="#FFFFFF" stroke="#147EBA" stroke-width="1.5"/>
+    <rect x="28" y="192" width="290" height="25" rx="4" fill="#147EBA"/>
+    <text x="173" y="209" text-anchor="middle" font-size="11.5" font-weight="700" fill="#FFFFFF">Kubernetes Cluster (k3d · Terraform + Helm)</text>
+
+    <!-- GitHub Repo -> ArgoCD poll path (routes clear of cluster title badge) -->
+    <path d="M 238 128 V 172 H 334 V 224 H 133 V 230" fill="none" stroke="#24292F" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <rect x="218" y="162" width="132" height="16" fill="#FFFFFF"/>
+    <text x="284" y="174" text-anchor="middle" font-size="9.5" font-weight="700" fill="#232F3E">polls k8s/overlays/prod</text>
+
+    <!-- Control Plane Services Row -->
+    <g transform="translate(46,232)">
+      <rect width="174" height="68" rx="5" fill="#FFF7F2" stroke="#E86F2C" stroke-width="1.3"/>
+      <text x="87" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">ArgoCD (v10.18.3)</text>
+      <text x="87" y="40" text-anchor="middle" font-size="10" fill="#545B64">GitOps Pull Controller</text>
+      <text x="87" y="56" text-anchor="middle" font-size="9.5" fill="#E86F2C" font-weight="700">prune · selfHeal · CreateNS</text>
+    </g>
+
+    <g transform="translate(234,232)">
+      <rect width="174" height="68" rx="5" fill="#F2F8F0" stroke="#3F8624" stroke-width="1.3"/>
+      <text x="87" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">Sealed Secrets (2.22.0)</text>
+      <text x="87" y="40" text-anchor="middle" font-size="10" fill="#545B64">kube-system controller</text>
+      <text x="87" y="56" text-anchor="middle" font-size="9.5" fill="#3F8624" font-weight="700">kubeseal asymmetric decrypt</text>
+    </g>
+
+    <g transform="translate(422,232)">
+      <rect width="184" height="68" rx="5" fill="#F6F2FF" stroke="#7C3AED" stroke-width="1.3"/>
+      <text x="92" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">Envoy Gateway (v1.8.3)</text>
+      <text x="92" y="40" text-anchor="middle" font-size="10" fill="#545B64">GatewayClass: eg</text>
+      <text x="92" y="56" text-anchor="middle" font-size="9.5" fill="#7C3AED" font-weight="700">Gateway API CRDs</text>
+    </g>
+
+    <g transform="translate(620,232)">
+      <rect width="186" height="68" rx="5" fill="#FFF5F6" stroke="#DD344C" stroke-width="1.3"/>
+      <text x="93" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">Cilium Tetragon (1.7.0)</text>
+      <text x="93" y="40" text-anchor="middle" font-size="10" fill="#545B64">Host eBPF Agent</text>
+      <text x="93" y="56" text-anchor="middle" font-size="9.5" fill="#DD344C" font-weight="700">debugfs / tracefs kprobes</text>
+    </g>
+
+    <!-- ArgoCD -> Workload Namespace arrow -->
+    <line x1="133" y1="300" x2="133" y2="328" stroke="#E86F2C" stroke-width="1.4" marker-end="url(#arr)"/>
+    <text x="172" y="319" font-size="9.5" fill="#545B64">reconciles</text>
+
+    <!-- Workload Namespace Container -->
+    <rect x="46" y="334" width="760" height="250" rx="5" fill="#F9FCFA" stroke="#248814" stroke-width="1.4"/>
+    <text x="58" y="353" font-size="11" font-weight="700" fill="#248814">Namespace: podinfo-prod (PSS Restricted · NetworkPolicy · PDB minAvailable: 1)</text>
+
+    <!-- Users -> Gateway -> Service -> Pods -->
+    <g transform="translate(60,382)">
+      <rect width="74" height="64" rx="5" fill="#FFFFFF" stroke="#232F3E" stroke-width="1.3"/>
+      <circle cx="37" cy="21" r="5" fill="none" stroke="#232F3E" stroke-width="1.6"/>
+      <path d="M27 36 c0 -5 4.5 -8 10 -8 s10 3 10 8" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/>
+      <text x="37" y="53" text-anchor="middle" font-size="10.5" font-weight="700" fill="#232F3E">Users</text>
+    </g>
+
+    <line x1="134" y1="414" x2="164" y2="414" stroke="#545B64" stroke-width="1.4" marker-end="url(#arr)"/>
+    <text x="149" y="405" text-anchor="middle" font-size="9.5" fill="#545B64">:80</text>
+
+    <g transform="translate(170,376)">
+      <rect width="164" height="76" rx="5" fill="#FFFFFF" stroke="#7C3AED" stroke-width="1.3"/>
+      <text x="82" y="23" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">Gateway + HTTPRoute</text>
+      <text x="82" y="41" text-anchor="middle" font-size="10" fill="#545B64">main-gateway · podinfo-route</text>
+      <text x="82" y="58" text-anchor="middle" font-size="10" fill="#7C3AED">podinfo.local → PathPrefix /</text>
+    </g>
+
+    <line x1="334" y1="414" x2="366" y2="414" stroke="#545B64" stroke-width="1.4" marker-end="url(#arr)"/>
+    <text x="350" y="405" text-anchor="middle" font-size="9.5" fill="#545B64">:80</text>
+
+    <g transform="translate(372,376)">
+      <rect width="150" height="76" rx="5" fill="#FFFFFF" stroke="#147EBA" stroke-width="1.3"/>
+      <text x="75" y="23" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">Service: podinfo</text>
+      <text x="75" y="41" text-anchor="middle" font-size="10" fill="#545B64">ClusterIP · :80 → :9898</text>
+      <text x="75" y="58" text-anchor="middle" font-size="9.5" fill="#147EBA">Tailscale expose optional</text>
+    </g>
+
+    <line x1="522" y1="414" x2="564" y2="414" stroke="#545B64" stroke-width="1.4" marker-end="url(#arr)"/>
+    <text x="543" y="405" text-anchor="middle" font-size="9.5" fill="#545B64">:9898</text>
+
+    <!-- Podinfo Pods -->
+    <g transform="translate(570,368)">
+      <rect width="220" height="92" rx="5" fill="#EEF6FF" stroke="#147EBA" stroke-width="1.6"/>
+      <text x="110" y="21" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">3× Podinfo Go Pods</text>
+      <text x="110" y="39" text-anchor="middle" font-size="10" fill="#545B64">FROM scratch · UID/GID 1000</text>
+      <text x="110" y="55" text-anchor="middle" font-size="10" fill="#545B64">RO rootfs · drop ALL · RuntimeDefault</text>
+      <text x="110" y="71" text-anchor="middle" font-size="10" fill="#147EBA">/healthz · /readyz · /metrics</text>
+      <text x="110" y="85" text-anchor="middle" font-size="9" fill="#545B64">emptyDir: /tmp &amp; /data · SA token off</text>
+    </g>
+
+    <!-- Bottom row inside podinfo-prod -->
+    <g transform="translate(170,496)">
+      <rect width="352" height="70" rx="5" fill="#FFFFFF" stroke="#3F8624" stroke-width="1.3"/>
+      <text x="176" y="22" text-anchor="middle" font-size="10.5" font-weight="700" fill="#232F3E">SealedSecret File Mount (CKV_K8S_35 Safe)</text>
+      <text x="176" y="40" text-anchor="middle" font-size="10" fill="#545B64">/etc/podinfo/secrets/config.yaml (readOnly · mode 0400)</text>
+      <text x="176" y="56" text-anchor="middle" font-size="9.5" fill="#3F8624">scripts/seal-secret.sh → Viper JWT config</text>
+    </g>
+
+    <!-- Arrow from SealedSecret to Pods -->
+    <path d="M 522 531 H 546 V 442 H 564" fill="none" stroke="#3F8624" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#arr-green)"/>
+
+    <g transform="translate(570,496)">
+      <rect width="220" height="70" rx="5" fill="#FFF5F6" stroke="#DD344C" stroke-width="1.3"/>
+      <text x="110" y="22" text-anchor="middle" font-size="10.5" font-weight="700" fill="#232F3E">TracingPolicyNamespaced</text>
+      <text x="110" y="40" text-anchor="middle" font-size="10" fill="#545B64">Scoped to app: podinfo only</text>
+      <text x="110" y="56" text-anchor="middle" font-size="9.5" font-weight="700" fill="#DD344C">SIGKILL: /etc/shadow &amp; sh/curl/wget</text>
+    </g>
+
+    <!-- Arrow from TracingPolicy up to Pods -->
+    <line x1="680" y1="496" x2="680" y2="466" stroke="#DD344C" stroke-width="1.4" marker-end="url(#arr-red)"/>
+
+    <!-- ==================== BOTTOM-RIGHT: DECOUPLED MONITORING ==================== -->
+    <rect x="858" y="192" width="254" height="408" rx="6" fill="#FFFFFF" stroke="#545B64" stroke-width="1.5"/>
+    <rect x="858" y="192" width="254" height="25" rx="5" fill="#545B64"/>
+    <rect x="858" y="209" width="254" height="8" fill="#545B64"/>
+    <text x="985" y="209" text-anchor="middle" font-size="11.5" font-weight="700" fill="#FFFFFF">Monitoring (Docker Compose)</text>
+
+    <!-- Tailscale Mesh Badge -->
+    <rect x="878" y="238" width="214" height="58" rx="5" fill="#F6F2FF" stroke="#7C3AED" stroke-width="1.3"/>
+    <text x="985" y="261" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">Tailscale Mesh VPN</text>
+    <text x="985" y="279" text-anchor="middle" font-size="10" fill="#7C3AED">Encrypted private scrape (no public ports)</text>
+
+    <!-- Tailscale scrape arrow from Service -> Prometheus -->
+    <path d="M 447 376 V 317 H 840 V 386 H 872" fill="none" stroke="#7C3AED" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arr-purple)"/>
+    <rect x="646" y="308" width="144" height="16" fill="#FFFFFF"/>
+    <text x="718" y="320" text-anchor="middle" font-size="9.5" font-weight="700" fill="#7C3AED">Tailscale /metrics :80</text>
+
+    <!-- Prometheus -->
+    <g transform="translate(878,342)">
+      <rect width="214" height="88" rx="5" fill="#FFF7F2" stroke="#E86F2C" stroke-width="1.4"/>
+      <text x="107" y="24" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Prometheus (v3.2.1)</text>
+      <text x="107" y="43" text-anchor="middle" font-size="10" fill="#545B64">15s scrape · 15d TSDB retention</text>
+      <text x="107" y="60" text-anchor="middle" font-size="10" fill="#545B64">RO config · no-new-privileges</text>
+      <text x="107" y="76" text-anchor="middle" font-size="9.5" fill="#E86F2C">Bind: 127.0.0.1 / Tailscale IP</text>
+    </g>
+
+    <line x1="985" y1="430" x2="985" y2="472" stroke="#545B64" stroke-width="1.4" marker-end="url(#arr)"/>
+    <text x="1044" y="456" text-anchor="middle" font-size="9.5" fill="#545B64">datasource :9090</text>
+
+    <!-- Grafana -->
+    <g transform="translate(878,478)">
+      <rect width="214" height="92" rx="5" fill="#F8FAFC" stroke="#232F3E" stroke-width="1.4"/>
+      <text x="107" y="24" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Grafana (11.5.2)</text>
+      <text x="107" y="43" text-anchor="middle" font-size="10" fill="#545B64">Auto-provisioned Prometheus DS</text>
+      <text x="107" y="60" text-anchor="middle" font-size="10" fill="#545B64">Env-required admin password</text>
+      <text x="107" y="76" text-anchor="middle" font-size="9.5" fill="#545B64">RO provisioning · no-new-privileges</text>
+    </g>
+  </g>
+</svg>

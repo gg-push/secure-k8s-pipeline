@@ -1,109 +1,99 @@
-# Secure K8s Deployment Pipeline
+# Zero-Trust DevSecOps Kubernetes Pipeline (`secure-k8s-pipeline`)
 
-Production-grade DevSecOps CI/CD pipeline, GitOps deployment, and runtime-hardened Kubernetes stack for a Go microservice (`podinfo`).
+[![Enterprise SecOps Pipeline](https://github.com/gg-push/secure-k8s-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/gg-push/secure-k8s-pipeline/actions/workflows/ci.yml)
 
-## Enterprise Architecture
+Production-hardened DevSecOps CI/CD pipeline and pull-based GitOps stack deploying a static `FROM scratch` Go microservice (`podinfo`) onto Kubernetes (`k3d` via Terraform & Helm), guarded by Shift-Left SAST/IaC/SCA gates, keyless Cosign digest signing, Envoy Gateway API, Sealed Secrets, and namespaced Cilium Tetragon eBPF runtime enforcement.
 
-```mermaid
-graph LR
-    Dev[Developer] -->|git push| Git[GitHub Repository]
-    Git -->|Triggers| CI[GitHub Actions CI]
+---
 
-    subgraph CI Pipeline
-        Gitleaks[Gitleaks: Secret Scan]
-        GoSec[go vet / test -race / gosec]
-        Checkov[Checkov + TF + Kustomize Gate]
-        Trivy[Trivy: Container SCA]
-        SBOM[Anchore: SPDX SBOM]
-        Cosign[Cosign: Keyless Digest Sign]
-    end
+## Architecture
 
-    CI --> Gitleaks --> GoSec --> Checkov --> Trivy --> SBOM --> Cosign
-    Cosign -->|Push Verified Digest| GHCR[GitHub Container Registry]
+![Zero-Trust DevSecOps Kubernetes Architecture](./docs/architecture.svg)
 
-    Argo[ArgoCD GitOps] -->|Polls k8s/overlays/prod| Git
-    Argo -->|Deploys to k3d| K8s[Kubernetes Cluster]
+---
 
-    User[External User] -->|Port 80| Envoy[Envoy Edge Gateway]
-    Envoy -->|HTTPRoute| Pod[Podinfo Go Microservice]
+## Security & Supply-Chain Controls
 
-    Tetragon[Cilium Tetragon eBPF] -->|TracingPolicyNamespaced| Pod
+| Layer | Control | Implementation |
+|---|---|---|
+| **Secret & Code SAST** | Full-history secret scan + Go static analysis | `Gitleaks` (`.gitleaks.toml`), `go vet`, `go test -race`, `gosec` (`./cmd/podinfo/... ./pkg/...`) |
+| **IaC & Manifest Gate** | Blocking Terraform, Kustomize & policy scan | `terraform fmt/validate`, `kubectl kustomize`, `Checkov` (`soft_fail: false`, `.checkov.yml`) |
+| **Container & Supply Chain** | Single-build SCA + immutable digest signing | `FROM scratch` (`USER 1000`), `Trivy` (`CRITICAL/HIGH`), `@sha256` push, SPDX SBOM, keyless `Cosign` |
+| **Pod Security (Restricted)** | Zero-privilege container runtime | `automountServiceAccountToken: false`, `readOnlyRootFilesystem: true`, `drop: ["ALL"]`, `RuntimeDefault` seccomp |
+| **Network Isolation** | Default-deny pod ingress/egress | `NetworkPolicy` allows `:9898` only from same-ns, `envoy-gateway-system`, `tailscale`, `monitoring`; DNS `:53` egress |
+| **Secrets Management** | Asymmetric GitOps encryption + file mount | `sealed-secrets-controller` (`kube-system`), `scripts/seal-secret.sh`, read-only `0400` file mount (no env var secrets) |
+| **eBPF Runtime Security** | Kernel-level syscall/file enforcement | `TracingPolicyNamespaced` scoped strictly to `app: podinfo` (`SIGKILL` on `/etc/shadow` or `sh`/`bash`/`curl`/`wget`) |
+
+---
+
+## Environments (Kustomize Overlays)
+
+| Overlay | Namespace | Replicas | Availability | Hostname (`HTTPRoute`) |
+|---|---|---|---|---|
+| `k8s/overlays/dev` | `podinfo-dev` | `1` | Single pod | `dev.podinfo.local` |
+| `k8s/overlays/prod` | `podinfo-prod` | `3` | `PodDisruptionBudget` (`minAvailable: 1`) | `podinfo.local` |
+
+Cluster-scoped [`k8s/cluster/gatewayclass.yaml`](k8s/cluster/gatewayclass.yaml) is applied once at bootstrap so `dev` and `prod` overlays stay completely isolated.
+
+---
+
+## Repository Layout
+
+```text
+secure-k8s-pipeline/
+├── .github/workflows/ci.yml            # Gitleaks, go vet/test -race/gosec, Checkov, Trivy, SBOM & Cosign
+├── .gitleaks.toml / .checkov.yml       # Documented test-token allowlist & Checkov policy configuration
+├── app/
+│   ├── Dockerfile                      # Multi-stage golang:1.26-alpine -> scratch (non-root UID 1000)
+│   └── cmd/ & pkg/                     # Go HTTP/gRPC microservice (/healthz, /readyz, /metrics)
+├── docs/architecture.svg               # End-to-end SecOps & GitOps architecture diagram
+├── k8s/
+│   ├── argocd-app.yaml                 # Root ArgoCD Application (podinfo-prod, prune + selfHeal)
+│   ├── cluster/gatewayclass.yaml       # Cluster-scoped Envoy GatewayClass (eg)
+│   ├── base/                           # PSS-Restricted Deployment, Service, NetworkPolicy, Tetragon, Gateway
+│   └── overlays/{dev,prod}/            # Isolated namespace overlays + prod PodDisruptionBudget
+├── monitoring/
+│   ├── docker-compose.yml              # Pinned Prometheus (v3.2.1) & Grafana (11.5.2), RO mounts, no-new-privileges
+│   ├── grafana/provisioning/           # Auto-provisioned Prometheus datasource
+│   ├── prometheus.yml                  # Tailscale /metrics scrape configuration
+│   └── .env.example                    # Bind IP & required Grafana admin password template
+├── scripts/seal-secret.sh              # Helper to encrypt podinfo-secrets via kubeseal
+└── terraform/main.tf                   # 2-stage k3d bootstrap + ArgoCD, Sealed Secrets, Tetragon & Envoy Helm charts
 ```
 
-## Phase 1: Application & Hardened Multi-Stage Container
+---
 
-- **Base Application**: Go microservice (`app/`) exposing `/healthz`, `/readyz`, and Prometheus `/metrics` on port `9898`.
-- **Multi-Stage `FROM scratch` Build** ([app/Dockerfile](app/Dockerfile)):
-  1. **Builder (`golang:1.26-alpine`)**: Installs CA certificates and builds a statically linked multi-arch binary (`CGO_ENABLED=0`, `-trimpath -ldflags="-w -s"`).
-  2. **Runtime (`FROM scratch`)**: Copies only `/podinfo`, `/ui`, and `/etc/ssl/certs/ca-certificates.crt`, running as non-root `USER 1000:1000` with zero shell or package manager attack surface.
+## Quickstart 1: Local Cluster ($0 via `k3d` + Terraform)
 
-## Phase 2: Shift-Left SecOps CI Pipeline
-
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) enforces strict, blocking security gates with least-privilege permissions (`contents: read` at workflow level):
-
-1. **Secret Scanning (`Gitleaks`)**: Scans full Git history (`fetch-depth: 0`) using [`.gitleaks.toml`](.gitleaks.toml) to allowlist only documented dummy unit-test tokens.
-2. **Go Static Analysis & Tests**: Runs `go vet ./...`, `go test -race -v ./...`, and `gosec` directly inside `./app`.
-3. **IaC & Manifest Gate**: Validates `terraform fmt -check`, `terraform validate`, `kubectl kustomize` builds for both `dev` and `prod` overlays, and runs **Checkov** (`soft_fail: false` via [`.checkov.yml`](.checkov.yml)).
-4. **Single-Build & Trivy SCA**: Builds the image once (`:<sha>` and `:latest`) and fails the pipeline if `CRITICAL` or `HIGH` OS/library CVEs exist.
-5. **Immutable Digest Push, SBOM & Cosign**: On `main`, pushes the exact scanned image, captures its `@sha256:...` digest, uploads an SPDX SBOM artifact (`sbom.spdx.json`), and signs the immutable digest via keyless **Cosign**.
-
-## Phase 3: Pod Security Standard (Restricted) & Network Isolation
-
-All base manifests live in [`k8s/base/`](k8s/base/):
-- **Pod & Container Hardening** ([`deployment.yaml`](k8s/base/deployment.yaml)): `automountServiceAccountToken: false`, `runAsNonRoot: true`, `runAsUser/Group/fsGroup: 1000`, `seccompProfile: RuntimeDefault`, `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: ["ALL"]`, with `emptyDir` mounts at `/tmp` and `/data`.
-- **Zero-Trust NetworkPolicy** ([`networkpolicy.yaml`](k8s/base/networkpolicy.yaml)): Restricts ingress on TCP `9898` to same-namespace pods plus `envoy-gateway-system`, `tailscale`, and `monitoring` namespaces, and restricts egress to `kube-system` DNS (`53`).
-- **Availability (`prod`)**: [`k8s/overlays/prod/pdb.yaml`](k8s/overlays/prod/pdb.yaml) enforces `PodDisruptionBudget` (`minAvailable: 1`) across the 3 production replicas.
-
-## Phase 4: GitOps Secrets Management (Sealed Secrets)
-
-Terraform installs the **Bitnami Sealed Secrets** controller in `kube-system`. Generate and encrypt a real `PODINFO_JWT_SECRET` for either environment using [`scripts/seal-secret.sh`](scripts/seal-secret.sh):
+Requires Docker, `k3d`, `kubectl`, and Terraform `>= 1.10`.
 
 ```bash
-chmod +x scripts/seal-secret.sh
-./scripts/seal-secret.sh prod
+# 1. Create k3d cluster with debugfs/tracefs bind-mounted for Cilium Tetragon
+terraform -chdir=terraform init
+terraform -chdir=terraform apply -target=null_resource.k3d_cluster -auto-approve
+
+# 2. Install ArgoCD, Sealed Secrets, Tetragon, Envoy Gateway, and apply GitOps manifests
+terraform -chdir=terraform apply -auto-approve
+
+# 3. Teardown cluster and generated kubeconfig when done
+terraform -chdir=terraform destroy -auto-approve
 ```
 
-Then add `- sealed-secret.yaml` to `k8s/overlays/prod/kustomization.yaml` and commit. [`deployment.yaml`](k8s/base/deployment.yaml) mounts `podinfo-secrets` read-only at `/etc/podinfo/secrets/config.yaml` (`optional: true`, mode `0400`) so pods start cleanly before sealing and automatically load the decrypted secret file without exposing secrets as environment variables.
+## Quickstart 2: Sealing a Secret (`kubeseal`)
 
-## Phase 5–7: ArgoCD GitOps, Gateway API & Multi-Env Kustomize
+[`deployment.yaml`](k8s/base/deployment.yaml) mounts `podinfo-secrets` read-only at `/etc/podinfo/secrets/config.yaml` (`optional: true`, mode `0400`). To seal and enable a real JWT secret for an environment:
 
-- **Cluster-Scoped GatewayClass**: [`k8s/cluster/gatewayclass.yaml`](k8s/cluster/gatewayclass.yaml) defines the Envoy GatewayClass once at the cluster level.
-- **Namespace-Isolated Overlays**:
-  - `k8s/overlays/dev` → namespace `podinfo-dev`, `1` replica, hostname `dev.podinfo.local`.
-  - `k8s/overlays/prod` → namespace `podinfo-prod`, `3` replicas, `PodDisruptionBudget`, hostname `podinfo.local`.
-- **ArgoCD Handover**: [`k8s/argocd-app.yaml`](k8s/argocd-app.yaml) deploys `k8s/overlays/prod` into `podinfo-prod` with `prune: true`, `selfHeal: true`, and `CreateNamespace=true`.
+```bash
+./scripts/seal-secret.sh prod
+# Add `- sealed-secret.yaml` to k8s/overlays/prod/kustomization.yaml and commit
+```
 
-## Phase 8: Namespaced eBPF Runtime Security (Cilium Tetragon)
-
-[`k8s/base/tetragon-policy.yaml`](k8s/base/tetragon-policy.yaml) uses **`TracingPolicyNamespaced`** scoped strictly via `podSelector: { matchLabels: { app: podinfo } }` in the target namespace (`podinfo-dev` or `podinfo-prod`). Any unexpected attempt inside a `podinfo` container to open `/etc/shadow` or `execve` `/bin/sh`, `/bin/bash`, `curl`, or `wget` triggers kernel-level `SIGKILL` without impacting system or ArgoCD pods.
-
-## Phase 9: Hardened Monitoring Stack (Prometheus + Grafana over Tailscale)
-
-[`monitoring/`](monitoring/) provides a decoupled Docker Compose stack with pinned versions (`prom/prometheus:v3.2.1`, `grafana/grafana:11.5.2`), `no-new-privileges:true`, read-only config mounts, localhost/Tailscale binding (`MONITORING_BIND_IP`), auto-provisioned Prometheus datasource, and required admin credentials:
+## Quickstart 3: Decoupled Monitoring Stack (Prometheus + Grafana)
 
 ```bash
 cd monitoring
 cp .env.example .env
-# Edit .env with a strong GRAFANA_ADMIN_PASSWORD (and Tailscale bind IP if remote)
+# Set GRAFANA_ADMIN_PASSWORD (and MONITORING_BIND_IP if binding to a Tailscale interface)
 # Update monitoring/prometheus.yml with your podinfo Tailscale MagicDNS host or IP
 docker compose up -d
 ```
-
-## How to Deploy Locally ($0 via k3d + Terraform)
-
-Requires Docker, `k3d`, `kubectl`, and Terraform `>= 1.10`.
-
-1. **Bootstrap the `k3d` cluster** (bind-mounts `/sys/kernel/debug` and `/sys/kernel/tracing` for Tetragon):
-   ```bash
-   cd terraform
-   terraform init
-   terraform apply -target=null_resource.k3d_cluster -auto-approve
-   ```
-2. **Install ArgoCD, Sealed Secrets, Tetragon, Envoy Gateway, and apply GitOps manifests**:
-   ```bash
-   terraform apply -auto-approve
-   ```
-3. **Teardown when finished** (deletes `k3d` cluster and generated kubeconfig):
-   ```bash
-   terraform destroy -auto-approve
-   ```
