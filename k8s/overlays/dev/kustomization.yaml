@@ -13,7 +13,7 @@ labels:
 
 images:
   - name: ghcr.io/gg-push/secure-k8s-pipeline
-    newTag: latest
+    digest: sha256:02e93be44f9824c5786a2161fd75bb7b3be19010201716b9df3010b26906ecad
 
 patches:
   - target:
