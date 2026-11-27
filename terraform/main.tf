@@ -147,5 +147,6 @@ resource "null_resource" "bootstrap_gitops" {
     helm_release.argocd,
     helm_release.envoy_gateway,
     helm_release.sealed_secrets,
+    helm_release.tetragon,
   ]
 }
