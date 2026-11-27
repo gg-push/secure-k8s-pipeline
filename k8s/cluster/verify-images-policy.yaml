@@ -1,0 +1,46 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-podinfo-supply-chain
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  validationFailureAction: Enforce
+  background: false
+  webhookTimeoutSeconds: 30
+  rules:
+    - name: verify-cosign-signature-and-sbom
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - podinfo-prod
+                - podinfo-dev
+      verifyImages:
+        - imageReferences:
+            - "*"
+          type: SigstoreBundle
+          verifyDigest: true
+          mutateDigest: true
+          required: true
+          attestations:
+            - type: https://sigstore.dev/cosign/sign/v1
+              attestors:
+                - count: 1
+                  entries:
+                    - keyless:
+                        issuer: "https://token.actions.githubusercontent.com"
+                        subject: "https://github.com/gg-push/secure-k8s-pipeline/.github/workflows/ci.yml@refs/heads/main"
+                        rekor:
+                          url: https://rekor.sigstore.dev
+            - type: https://spdx.dev/Document
+              attestors:
+                - count: 1
+                  entries:
+                    - keyless:
+                        issuer: "https://token.actions.githubusercontent.com"
+                        subject: "https://github.com/gg-push/secure-k8s-pipeline/.github/workflows/ci.yml@refs/heads/main"
+                        rekor:
+                          url: https://rekor.sigstore.dev
