@@ -38,6 +38,8 @@ resource "null_resource" "k3d_cluster" {
       set -euo pipefail
       k3d cluster create ${local.cluster_name} \
         --servers 1 \
+        --k3s-arg "--disable=traefik@server:0" \
+        -p "8080:80@loadbalancer" \
         --volume /sys/kernel/debug:/sys/kernel/debug \
         --volume /sys/kernel/tracing:/sys/kernel/tracing \
         --wait \
