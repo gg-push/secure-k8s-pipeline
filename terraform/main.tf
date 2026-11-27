@@ -157,6 +157,11 @@ resource "helm_release" "kyverno" {
       reportsController = {
         replicas = 1
       }
+      upgrade = {
+        legacyPolicyCheck = {
+          enabled = false
+        }
+      }
     })
   ]
 
