@@ -18,7 +18,7 @@ Production-hardened DevSecOps CI/CD pipeline and pull-based GitOps stack deployi
 |---|---|---|
 | **Secret & Code SAST** | Full-history secret scan + Go static analysis | `Gitleaks` (`.gitleaks.toml`), `go vet`, `go test -race`, `gosec` (`./cmd/podinfo/... ./pkg/...`) |
 | **IaC & Manifest Gate** | Blocking Terraform, Kustomize & policy scan | `terraform fmt/validate`, `kubectl kustomize`, `Checkov` (`soft_fail: false`, `.checkov.yml`) |
-| **Container & Supply Chain** | Single-build SCA + immutable digest signing + admission enforcement | `FROM scratch` (`USER 1000`), `Trivy` (`CRITICAL/HIGH`), `@sha256` auto-pinned overlays, keyless `Cosign` signature & SPDX SBOM `attest`, `Kyverno` `ClusterPolicy` |
+| **Container & Supply Chain** | Single-build SCA + immutable digest signing + admission enforcement | `FROM scratch` (`USER 1000`), `Trivy` (`CRITICAL/HIGH`), `@sha256` auto-pinned overlays, keyless `Cosign` signature & SPDX SBOM `attest`, `Kyverno` `ImageValidatingPolicy` |
 | **Pod Security (Restricted)** | Zero-privilege container runtime | `automountServiceAccountToken: false`, `readOnlyRootFilesystem: true`, `drop: ["ALL"]`, `RuntimeDefault` seccomp |
 | **Network Isolation** | Default-deny pod ingress/egress | `NetworkPolicy` allows `:9898` only from same-ns and `envoy-gateway-system`; DNS `:53` egress |
 | **Secrets Management** | Asymmetric GitOps encryption + file mount | `sealed-secrets-controller` (`kube-system`), `scripts/seal-secret.sh`, read-only `0400` file mount (no env var secrets) |
@@ -51,7 +51,7 @@ secure-k8s-pipeline/
 │   ├── argocd-app.yaml                 # Root ArgoCD Application (podinfo-prod, prune + selfHeal)
 │   ├── cluster/
 │   │   ├── gatewayclass.yaml           # Cluster-scoped Envoy GatewayClass (eg)
-│   │   └── verify-images-policy.yaml   # Kyverno ClusterPolicy enforcing Cosign sig + SPDX SBOM
+│   │   └── verify-images-policy.yaml   # Kyverno ImageValidatingPolicy enforcing Cosign sig + SPDX SBOM
 │   ├── base/                           # PSS-Restricted Deployment, Service, NetworkPolicy, Tetragon, Gateway
 │   └── overlays/{dev,prod}/            # Isolated namespace overlays + prod PodDisruptionBudget
 ├── scripts/seal-secret.sh              # Helper to encrypt podinfo-secrets via kubeseal

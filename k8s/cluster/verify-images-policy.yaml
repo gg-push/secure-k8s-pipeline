@@ -1,46 +1,57 @@
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
 metadata:
   name: verify-podinfo-supply-chain
-  annotations:
-    pod-policies.kyverno.io/autogen-controllers: none
 spec:
-  validationFailureAction: Enforce
-  background: false
-  webhookTimeoutSeconds: 30
-  rules:
-    - name: verify-cosign-signature-and-sbom
-      match:
-        any:
-          - resources:
-              kinds:
-                - Pod
-              namespaces:
-                - podinfo-prod
-                - podinfo-dev
-      verifyImages:
-        - imageReferences:
-            - "*"
-          type: SigstoreBundle
-          verifyDigest: true
-          mutateDigest: true
-          required: true
-          attestations:
-            - type: https://sigstore.dev/cosign/sign/v1
-              attestors:
-                - count: 1
-                  entries:
-                    - keyless:
-                        issuer: "https://token.actions.githubusercontent.com"
-                        subject: "https://github.com/gg-push/secure-k8s-pipeline/.github/workflows/ci.yml@refs/heads/main"
-                        rekor:
-                          url: https://rekor.sigstore.dev
-            - type: https://spdx.dev/Document
-              attestors:
-                - count: 1
-                  entries:
-                    - keyless:
-                        issuer: "https://token.actions.githubusercontent.com"
-                        subject: "https://github.com/gg-push/secure-k8s-pipeline/.github/workflows/ci.yml@refs/heads/main"
-                        rekor:
-                          url: https://rekor.sigstore.dev
+  failurePolicy: Fail
+  validationActions:
+    - Deny
+  evaluation:
+    background:
+      enabled: false
+  webhookConfiguration:
+    timeoutSeconds: 30
+  validationConfigurations:
+    mutateDigest: true
+    verifyDigest: true
+    required: true
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - podinfo-prod
+            - podinfo-dev
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - pods
+  matchImageReferences:
+    - glob: "*"
+  attestors:
+    - name: cosign
+      cosign:
+        ctlog:
+          url: https://rekor.sigstore.dev
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subject: https://github.com/gg-push/secure-k8s-pipeline/.github/workflows/ci.yml@refs/heads/main
+  attestations:
+    - name: sbom
+      intoto:
+        type: https://spdx.dev/Document
+  validations:
+    - expression: >-
+        images.containers.all(image,
+          verifyImageSignatures(image, [attestors.cosign]) > 0 &&
+          verifyAttestationSignatures(image, attestations.sbom, [attestors.cosign]) > 0
+        )
+      message: "Container image must have a valid Cosign keyless signature and signed SPDX SBOM attestation from gg-push/secure-k8s-pipeline main."
