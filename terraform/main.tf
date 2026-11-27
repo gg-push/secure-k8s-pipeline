@@ -130,17 +130,52 @@ resource "helm_release" "envoy_gateway" {
   depends_on = [null_resource.k3d_cluster]
 }
 
-# 7. Hand over cluster GatewayClass and root ArgoCD Application (zero manual kubectl)
+# 7. Install Kyverno Admission Controller (Cosign Signature & SBOM Enforcement)
+resource "helm_release" "kyverno" {
+  name             = "kyverno"
+  repository       = "https://kyverno.github.io/kyverno/"
+  chart            = "kyverno"
+  namespace        = "kyverno"
+  create_namespace = true
+  version          = "3.10.0"
+
+  # Single-node k3d overrides (disable HA anti-affinity so pods schedule on 1 server node)
+  values = [
+    yamlencode({
+      admissionController = {
+        replicas = 1
+        antiAffinity = {
+          enabled = false
+        }
+      }
+      backgroundController = {
+        replicas = 1
+      }
+      cleanupController = {
+        replicas = 1
+      }
+      reportsController = {
+        replicas = 1
+      }
+    })
+  ]
+
+  depends_on = [null_resource.k3d_cluster]
+}
+
+# 8. Hand over cluster GatewayClass, Kyverno supply-chain policy, and root ArgoCD Application (zero manual kubectl)
 resource "null_resource" "bootstrap_gitops" {
   triggers = {
-    gatewayclass_sha = filesha256("${path.module}/../k8s/cluster/gatewayclass.yaml")
-    argocd_app_sha   = filesha256("${path.module}/../k8s/argocd-app.yaml")
+    gatewayclass_sha         = filesha256("${path.module}/../k8s/cluster/gatewayclass.yaml")
+    verify_images_policy_sha = filesha256("${path.module}/../k8s/cluster/verify-images-policy.yaml")
+    argocd_app_sha           = filesha256("${path.module}/../k8s/argocd-app.yaml")
   }
 
   provisioner "local-exec" {
     command = <<-EOT
       set -euo pipefail
       KUBECONFIG=${local.kubeconfig_path} kubectl apply -f ${path.module}/../k8s/cluster/gatewayclass.yaml
+      KUBECONFIG=${local.kubeconfig_path} kubectl apply -f ${path.module}/../k8s/cluster/verify-images-policy.yaml
       KUBECONFIG=${local.kubeconfig_path} kubectl apply -f ${path.module}/../k8s/argocd-app.yaml
     EOT
   }
@@ -148,6 +183,7 @@ resource "null_resource" "bootstrap_gitops" {
   depends_on = [
     helm_release.argocd,
     helm_release.envoy_gateway,
+    helm_release.kyverno,
     helm_release.sealed_secrets,
     helm_release.tetragon,
   ]

@@ -2,7 +2,7 @@
 
 [![Enterprise SecOps Pipeline](https://github.com/gg-push/secure-k8s-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/gg-push/secure-k8s-pipeline/actions/workflows/ci.yml)
 
-Production-hardened DevSecOps CI/CD pipeline and pull-based GitOps stack deploying a static `FROM scratch` Go microservice (`podinfo`) onto Kubernetes (`k3d` via Terraform & Helm), guarded by Shift-Left SAST/IaC/SCA gates, keyless Cosign digest signing, Envoy Gateway API, Sealed Secrets, and namespaced Cilium Tetragon eBPF runtime enforcement.
+Production-hardened DevSecOps CI/CD pipeline and pull-based GitOps stack deploying a static `FROM scratch` Go microservice (`podinfo`) onto Kubernetes (`k3d` via Terraform & Helm), guarded by Shift-Left SAST/IaC/SCA gates, keyless Cosign digest signing & SPDX SBOM attestation, Kyverno admission verification, Envoy Gateway API, Sealed Secrets, and namespaced Cilium Tetragon eBPF runtime enforcement.
 
 ---
 
@@ -18,7 +18,7 @@ Production-hardened DevSecOps CI/CD pipeline and pull-based GitOps stack deployi
 |---|---|---|
 | **Secret & Code SAST** | Full-history secret scan + Go static analysis | `Gitleaks` (`.gitleaks.toml`), `go vet`, `go test -race`, `gosec` (`./cmd/podinfo/... ./pkg/...`) |
 | **IaC & Manifest Gate** | Blocking Terraform, Kustomize & policy scan | `terraform fmt/validate`, `kubectl kustomize`, `Checkov` (`soft_fail: false`, `.checkov.yml`) |
-| **Container & Supply Chain** | Single-build SCA + immutable digest signing | `FROM scratch` (`USER 1000`), `Trivy` (`CRITICAL/HIGH`), `@sha256` push, SPDX SBOM, keyless `Cosign` |
+| **Container & Supply Chain** | Single-build SCA + immutable digest signing + admission enforcement | `FROM scratch` (`USER 1000`), `Trivy` (`CRITICAL/HIGH`), `@sha256` auto-pinned overlays, keyless `Cosign` signature & SPDX SBOM `attest`, `Kyverno` `ClusterPolicy` |
 | **Pod Security (Restricted)** | Zero-privilege container runtime | `automountServiceAccountToken: false`, `readOnlyRootFilesystem: true`, `drop: ["ALL"]`, `RuntimeDefault` seccomp |
 | **Network Isolation** | Default-deny pod ingress/egress | `NetworkPolicy` allows `:9898` only from same-ns and `envoy-gateway-system`; DNS `:53` egress |
 | **Secrets Management** | Asymmetric GitOps encryption + file mount | `sealed-secrets-controller` (`kube-system`), `scripts/seal-secret.sh`, read-only `0400` file mount (no env var secrets) |
@@ -49,11 +49,13 @@ secure-k8s-pipeline/
 ├── docs/architecture.svg               # End-to-end SecOps & GitOps architecture diagram
 ├── k8s/
 │   ├── argocd-app.yaml                 # Root ArgoCD Application (podinfo-prod, prune + selfHeal)
-│   ├── cluster/gatewayclass.yaml       # Cluster-scoped Envoy GatewayClass (eg)
+│   ├── cluster/
+│   │   ├── gatewayclass.yaml           # Cluster-scoped Envoy GatewayClass (eg)
+│   │   └── verify-images-policy.yaml   # Kyverno ClusterPolicy enforcing Cosign sig + SPDX SBOM
 │   ├── base/                           # PSS-Restricted Deployment, Service, NetworkPolicy, Tetragon, Gateway
 │   └── overlays/{dev,prod}/            # Isolated namespace overlays + prod PodDisruptionBudget
 ├── scripts/seal-secret.sh              # Helper to encrypt podinfo-secrets via kubeseal
-└── terraform/main.tf                   # 2-stage k3d bootstrap + ArgoCD, Sealed Secrets, Tetragon & Envoy Helm charts
+└── terraform/main.tf                   # 2-stage k3d bootstrap + ArgoCD, Sealed Secrets, Tetragon, Envoy & Kyverno Helm charts
 ```
 
 ---
@@ -67,7 +69,7 @@ Requires Docker, `k3d`, `kubectl`, and Terraform `>= 1.10`.
 terraform -chdir=terraform init
 terraform -chdir=terraform apply -target=null_resource.k3d_cluster -auto-approve
 
-# 2. Install ArgoCD, Sealed Secrets, Tetragon, Envoy Gateway, and apply GitOps manifests
+# 2. Install ArgoCD, Sealed Secrets, Tetragon, Envoy Gateway, Kyverno, and apply GitOps manifests
 terraform -chdir=terraform apply -auto-approve
 
 # 3. Teardown cluster and generated kubeconfig when done
