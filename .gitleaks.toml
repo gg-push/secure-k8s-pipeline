@@ -1,12 +1,15 @@
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 description = "Dummy test JWT tokens and default local dev fallback in upstream podinfo"
+condition = "AND"
 paths = [
-  '''app/pkg/api/grpc/token_test\.go''',
-  '''app/pkg/api/http/token_test\.go''',
+  '''^app/cmd/podinfo/main\.go$''',
+  '''^app/pkg/api/grpc/token_test\.go$''',
+  '''^app/pkg/api/http/token_test\.go$''',
 ]
 regexes = [
-  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9''',
+  '''^eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9$''',
+  '''^eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJuYW1lIjoiZmFrZSIsImlzcyI6InBvZGluZm8iLCJleHAiOjk5OTk5OTk5OTl9\.invalidsig$''',
 ]
