@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 620" width="1140" height="620" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 632" width="1140" height="632" role="img" aria-labelledby="title desc">
   <title id="title">Zero-Trust DevSecOps Kubernetes Architecture</title>
-  <desc id="desc">Architecture diagram for secure-k8s-pipeline showing Shift-Left GitHub Actions CI (Gitleaks, go vet, test -race, gosec, Terraform, Kustomize, Checkov, Trivy, SBOM, Cosign), GHCR, and ArgoCD GitOps into k3d with Envoy Gateway, Sealed Secrets, NetworkPolicy, PDB, and Cilium Tetragon TracingPolicyNamespaced.</desc>
+  <desc id="desc">Architecture diagram for secure-k8s-pipeline showing Shift-Left GitHub Actions CI (Gitleaks, go vet, test -race, gosec, Terraform, Kustomize, Checkov, Trivy, Cosign keyless sign and SPDX SBOM attest, auto-pinned @sha256 digests), GHCR Sigstore v0.3 bundles, Kyverno ImageValidatingPolicy, ArgoCD GitOps into k3d with PSS restricted enforcement, Envoy Gateway, Sealed Secrets, NetworkPolicy, PDB, hardened Podinfo routes, and Cilium Tetragon TracingPolicyNamespaced with security_bprm_check.</desc>
 
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
@@ -15,10 +15,13 @@
     <marker id="arr-red" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#DD344C"/>
     </marker>
+    <marker id="arr-teal" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#0F766E"/>
+    </marker>
   </defs>
 
   <!-- Clean white diagram canvas -->
-  <rect width="1140" height="620" fill="#FFFFFF"/>
+  <rect width="1140" height="632" fill="#FFFFFF"/>
 
   <g font-family="Helvetica, Arial, -apple-system, sans-serif">
     <!-- ==================== TOP LANE: CI/CD & SUPPLY CHAIN ==================== -->
@@ -86,99 +89,114 @@
     <text x="1007" y="50" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF">GHCR + Supply Chain</text>
     <text x="1007" y="79" text-anchor="middle" font-size="10.5" font-weight="700" fill="#232F3E">ghcr.io/gg-push/secure-k8s-pipeline</text>
     <text x="1007" y="98" text-anchor="middle" font-size="10" fill="#545B64">Immutable @sha256 digest</text>
-    <text x="1007" y="115" text-anchor="middle" font-size="10" fill="#545B64">SPDX SBOM Artifact (Anchore)</text>
-    <text x="1007" y="132" text-anchor="middle" font-size="10" font-weight="700" fill="#248814">Cosign Keyless OIDC Sign</text>
+    <text x="1007" y="115" text-anchor="middle" font-size="10" font-weight="700" fill="#248814">Cosign Keyless Sign + SPDX Attest</text>
+    <text x="1007" y="132" text-anchor="middle" font-size="10" fill="#545B64">Sigstore v0.3 Bundles (Rekor)</text>
 
     <!-- ==================== FULL-WIDTH KUBERNETES CLUSTER ==================== -->
-    <rect x="28" y="192" width="1084" height="408" rx="6" fill="#FFFFFF" stroke="#147EBA" stroke-width="1.5"/>
-    <rect x="28" y="192" width="290" height="25" rx="4" fill="#147EBA"/>
-    <text x="173" y="209" text-anchor="middle" font-size="11.5" font-weight="700" fill="#FFFFFF">Kubernetes Cluster (k3d · Terraform + Helm)</text>
+    <rect x="28" y="204" width="1084" height="408" rx="6" fill="#FFFFFF" stroke="#147EBA" stroke-width="1.5"/>
+    <rect x="28" y="204" width="290" height="25" rx="4" fill="#147EBA"/>
+    <text x="173" y="221" text-anchor="middle" font-size="11.5" font-weight="700" fill="#FFFFFF">Kubernetes Cluster (k3d · Terraform + Helm)</text>
+
+    <!-- CI digest auto-pin feedback path (GHCR -> GitHub Repo) -->
+    <path d="M 950 148 V 166 H 274 V 130" fill="none" stroke="#248814" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#arr-green)"/>
+    <rect x="530" y="157" width="160" height="16" fill="#FFFFFF"/>
+    <text x="610" y="169" text-anchor="middle" font-size="9.5" font-weight="700" fill="#248814">CI auto-pins @sha256 digest</text>
 
     <!-- GitHub Repo -> ArgoCD poll path (routes clear of cluster title badge) -->
-    <path d="M 238 128 V 172 H 338 V 224 H 168 V 230" fill="none" stroke="#24292F" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#arr)"/>
-    <rect x="218" y="162" width="132" height="16" fill="#FFFFFF"/>
-    <text x="284" y="174" text-anchor="middle" font-size="9.5" font-weight="700" fill="#232F3E">polls k8s/overlays/prod</text>
+    <path d="M 218 128 V 184 H 338 V 236 H 146 V 242" fill="none" stroke="#24292F" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <rect x="212" y="175" width="132" height="16" fill="#FFFFFF"/>
+    <text x="278" y="187" text-anchor="middle" font-size="9.5" font-weight="700" fill="#232F3E">polls k8s/overlays/prod</text>
 
-    <!-- Control Plane Services Row (4 even cards spanning x=46..1094) -->
-    <g transform="translate(46,232)">
-      <rect width="244" height="68" rx="5" fill="#FFF7F2" stroke="#E86F2C" stroke-width="1.3"/>
-      <text x="122" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">ArgoCD (v10.18.3)</text>
-      <text x="122" y="40" text-anchor="middle" font-size="10" fill="#545B64">GitOps Pull Controller</text>
-      <text x="122" y="56" text-anchor="middle" font-size="9.5" fill="#E86F2C" font-weight="700">prune · selfHeal · CreateNamespace</text>
+    <!-- Control Plane Services Row (5 even cards spanning x=46..1094) -->
+    <g transform="translate(46,244)">
+      <rect width="200" height="68" rx="5" fill="#FFF7F2" stroke="#E86F2C" stroke-width="1.3"/>
+      <text x="100" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">ArgoCD (v10.18.3)</text>
+      <text x="100" y="40" text-anchor="middle" font-size="10" fill="#545B64">GitOps Pull Controller</text>
+      <text x="100" y="56" text-anchor="middle" font-size="9.5" fill="#E86F2C" font-weight="700">prune · selfHeal · PSS restricted</text>
     </g>
 
-    <g transform="translate(314,232)">
-      <rect width="244" height="68" rx="5" fill="#F2F8F0" stroke="#3F8624" stroke-width="1.3"/>
-      <text x="122" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Sealed Secrets (2.22.0)</text>
-      <text x="122" y="40" text-anchor="middle" font-size="10" fill="#545B64">kube-system controller</text>
-      <text x="122" y="56" text-anchor="middle" font-size="9.5" fill="#3F8624" font-weight="700">kubeseal asymmetric decrypt</text>
+    <g transform="translate(258,244)">
+      <rect width="200" height="68" rx="5" fill="#F0FDFA" stroke="#0F766E" stroke-width="1.3"/>
+      <text x="100" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Kyverno (3.10.0)</text>
+      <text x="100" y="40" text-anchor="middle" font-size="10" fill="#545B64">ImageValidatingPolicy</text>
+      <text x="100" y="56" text-anchor="middle" font-size="9.5" fill="#0F766E" font-weight="700">Cosign sig + SPDX SBOM</text>
     </g>
 
-    <g transform="translate(582,232)">
-      <rect width="244" height="68" rx="5" fill="#F6F2FF" stroke="#7C3AED" stroke-width="1.3"/>
-      <text x="122" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Envoy Gateway (v1.8.3)</text>
-      <text x="122" y="40" text-anchor="middle" font-size="10" fill="#545B64">Cluster GatewayClass: eg</text>
-      <text x="122" y="56" text-anchor="middle" font-size="9.5" fill="#7C3AED" font-weight="700">Gateway API CRDs</text>
+    <g transform="translate(470,244)">
+      <rect width="200" height="68" rx="5" fill="#F2F8F0" stroke="#3F8624" stroke-width="1.3"/>
+      <text x="100" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Sealed Secrets (2.22.0)</text>
+      <text x="100" y="40" text-anchor="middle" font-size="10" fill="#545B64">kube-system controller</text>
+      <text x="100" y="56" text-anchor="middle" font-size="9.5" fill="#3F8624" font-weight="700">kubeseal asymmetric decrypt</text>
     </g>
 
-    <g transform="translate(850,232)">
-      <rect width="244" height="68" rx="5" fill="#FFF5F6" stroke="#DD344C" stroke-width="1.3"/>
-      <text x="122" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Cilium Tetragon (1.8.0)</text>
-      <text x="122" y="40" text-anchor="middle" font-size="10" fill="#545B64">Host Kernel eBPF Agent</text>
-      <text x="122" y="56" text-anchor="middle" font-size="9.5" fill="#DD344C" font-weight="700">debugfs / tracefs kprobes</text>
+    <g transform="translate(682,244)">
+      <rect width="200" height="68" rx="5" fill="#F6F2FF" stroke="#7C3AED" stroke-width="1.3"/>
+      <text x="100" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Envoy Gateway (v1.8.3)</text>
+      <text x="100" y="40" text-anchor="middle" font-size="10" fill="#545B64">Cluster GatewayClass: eg</text>
+      <text x="100" y="56" text-anchor="middle" font-size="9.5" fill="#7C3AED" font-weight="700">Gateway API (:8080→:80)</text>
     </g>
 
-    <!-- ArgoCD -> Workload Namespace arrow -->
-    <line x1="168" y1="300" x2="168" y2="328" stroke="#E86F2C" stroke-width="1.4" marker-end="url(#arr)"/>
-    <text x="208" y="319" font-size="9.5" fill="#545B64">reconciles</text>
+    <g transform="translate(894,244)">
+      <rect width="200" height="68" rx="5" fill="#FFF5F6" stroke="#DD344C" stroke-width="1.3"/>
+      <text x="100" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Cilium Tetragon (1.8.0)</text>
+      <text x="100" y="40" text-anchor="middle" font-size="10" fill="#545B64">Host Kernel eBPF Agent</text>
+      <text x="100" y="56" text-anchor="middle" font-size="9.5" fill="#DD344C" font-weight="700">debugfs / tracefs kprobes</text>
+    </g>
+
+    <!-- ArgoCD + Kyverno -> Workload Namespace arrows -->
+    <line x1="146" y1="312" x2="146" y2="340" stroke="#E86F2C" stroke-width="1.4" marker-end="url(#arr)"/>
+    <text x="154" y="331" font-size="9.5" fill="#545B64">reconciles</text>
+
+    <line x1="358" y1="312" x2="358" y2="340" stroke="#0F766E" stroke-width="1.4" marker-end="url(#arr-teal)"/>
+    <text x="366" y="331" font-size="9.5" font-weight="700" fill="#0F766E">verifies sig + SBOM</text>
 
     <!-- Workload Namespace Container -->
-    <rect x="46" y="334" width="1048" height="250" rx="5" fill="#F9FCFA" stroke="#248814" stroke-width="1.4"/>
-    <text x="64" y="354" font-size="11.5" font-weight="700" fill="#248814">Namespace: podinfo-prod (PSS Restricted · NetworkPolicy · PDB minAvailable: 1)</text>
+    <rect x="46" y="346" width="1048" height="250" rx="5" fill="#F9FCFA" stroke="#248814" stroke-width="1.4"/>
+    <text x="64" y="366" font-size="11.5" font-weight="700" fill="#248814">Namespace: podinfo-prod (PSS enforce: restricted · NetworkPolicy · PDB minAvailable: 1)</text>
 
     <!-- Users -> Gateway -> Service -> Pods -->
-    <g transform="translate(64,382)">
+    <g transform="translate(64,394)">
       <rect width="88" height="64" rx="5" fill="#FFFFFF" stroke="#232F3E" stroke-width="1.3"/>
       <circle cx="44" cy="21" r="5" fill="none" stroke="#232F3E" stroke-width="1.6"/>
       <path d="M34 36 c0 -5 4.5 -8 10 -8 s10 3 10 8" fill="none" stroke="#232F3E" stroke-width="1.6" stroke-linecap="round"/>
       <text x="44" y="53" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">Users</text>
     </g>
 
-    <line x1="152" y1="414" x2="196" y2="414" stroke="#545B64" stroke-width="1.4" marker-end="url(#arr)"/>
-    <text x="174" y="405" text-anchor="middle" font-size="9.5" fill="#545B64">:80</text>
+    <line x1="152" y1="426" x2="196" y2="426" stroke="#545B64" stroke-width="1.4" marker-end="url(#arr)"/>
+    <text x="174" y="417" text-anchor="middle" font-size="9.5" fill="#545B64">:80</text>
 
-    <g transform="translate(202,376)">
+    <g transform="translate(202,388)">
       <rect width="206" height="76" rx="5" fill="#FFFFFF" stroke="#7C3AED" stroke-width="1.3"/>
       <text x="103" y="23" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Gateway + HTTPRoute</text>
       <text x="103" y="42" text-anchor="middle" font-size="10" fill="#545B64">main-gateway · podinfo-route</text>
       <text x="103" y="59" text-anchor="middle" font-size="10" fill="#7C3AED">podinfo.local → PathPrefix /</text>
     </g>
 
-    <line x1="408" y1="414" x2="452" y2="414" stroke="#545B64" stroke-width="1.4" marker-end="url(#arr)"/>
-    <text x="430" y="405" text-anchor="middle" font-size="9.5" fill="#545B64">:80</text>
+    <line x1="408" y1="426" x2="452" y2="426" stroke="#545B64" stroke-width="1.4" marker-end="url(#arr)"/>
+    <text x="430" y="417" text-anchor="middle" font-size="9.5" fill="#545B64">:80</text>
 
-    <g transform="translate(458,376)">
+    <g transform="translate(458,388)">
       <rect width="200" height="76" rx="5" fill="#FFFFFF" stroke="#147EBA" stroke-width="1.3"/>
       <text x="100" y="23" text-anchor="middle" font-size="11.5" font-weight="700" fill="#232F3E">Service: podinfo</text>
       <text x="100" y="42" text-anchor="middle" font-size="10" fill="#545B64">ClusterIP · :80 → :9898 (http)</text>
       <text x="100" y="59" text-anchor="middle" font-size="9.5" fill="#147EBA">NetworkPolicy: Envoy + ns</text>
     </g>
 
-    <line x1="658" y1="414" x2="704" y2="414" stroke="#545B64" stroke-width="1.4" marker-end="url(#arr)"/>
-    <text x="681" y="405" text-anchor="middle" font-size="9.5" fill="#545B64">:9898</text>
+    <line x1="658" y1="426" x2="704" y2="426" stroke="#545B64" stroke-width="1.4" marker-end="url(#arr)"/>
+    <text x="681" y="417" text-anchor="middle" font-size="9.5" fill="#545B64">:9898</text>
 
     <!-- Podinfo Pods -->
-    <g transform="translate(710,368)">
+    <g transform="translate(710,380)">
       <rect width="366" height="92" rx="5" fill="#EEF6FF" stroke="#147EBA" stroke-width="1.6"/>
-      <text x="183" y="21" text-anchor="middle" font-size="12" font-weight="700" fill="#232F3E">3× Podinfo Go Pods</text>
+      <text x="183" y="21" text-anchor="middle" font-size="12" font-weight="700" fill="#232F3E">3× Podinfo Go Pods (@sha256 pinned)</text>
       <text x="183" y="39" text-anchor="middle" font-size="10.5" fill="#545B64">FROM scratch · UID/GID 1000 · automountSA: false</text>
       <text x="183" y="55" text-anchor="middle" font-size="10.5" fill="#545B64">readOnlyRootFilesystem · drop ALL · RuntimeDefault</text>
-      <text x="183" y="71" text-anchor="middle" font-size="10" fill="#147EBA">/healthz · /readyz · /metrics</text>
+      <text x="183" y="71" text-anchor="middle" font-size="10" fill="#147EBA">/healthz · /readyz · /metrics (/configs, /env, /panic off)</text>
       <text x="183" y="85" text-anchor="middle" font-size="9.5" fill="#545B64">emptyDir mounts: /tmp &amp; /data</text>
     </g>
 
     <!-- Bottom row inside podinfo-prod -->
-    <g transform="translate(202,496)">
+    <g transform="translate(202,508)">
       <rect width="456" height="70" rx="5" fill="#FFFFFF" stroke="#3F8624" stroke-width="1.3"/>
       <text x="228" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">SealedSecret File Mount (CKV_K8S_35 Safe)</text>
       <text x="228" y="40" text-anchor="middle" font-size="10" fill="#545B64">/etc/podinfo/secrets/config.yaml (readOnly · mode 0400)</text>
@@ -186,16 +204,16 @@
     </g>
 
     <!-- Arrow from SealedSecret to Pods -->
-    <path d="M 658 531 H 684 V 442 H 704" fill="none" stroke="#3F8624" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#arr-green)"/>
+    <path d="M 658 543 H 684 V 454 H 704" fill="none" stroke="#3F8624" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#arr-green)"/>
 
-    <g transform="translate(710,496)">
+    <g transform="translate(710,508)">
       <rect width="366" height="70" rx="5" fill="#FFF5F6" stroke="#DD344C" stroke-width="1.3"/>
       <text x="183" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#232F3E">TracingPolicyNamespaced</text>
       <text x="183" y="40" text-anchor="middle" font-size="10" fill="#545B64">Scoped strictly to app: podinfo in podinfo-prod</text>
-      <text x="183" y="56" text-anchor="middle" font-size="9.5" font-weight="700" fill="#DD344C">SIGKILL: /etc/shadow &amp; sh / bash / curl / wget</text>
+      <text x="183" y="56" text-anchor="middle" font-size="9.5" font-weight="700" fill="#DD344C">SIGKILL: /etc/shadow &amp; exec ≠ /podinfo (bprm)</text>
     </g>
 
     <!-- Arrow from TracingPolicy up to Pods -->
-    <line x1="893" y1="496" x2="893" y2="466" stroke="#DD344C" stroke-width="1.4" marker-end="url(#arr-red)"/>
+    <line x1="893" y1="508" x2="893" y2="478" stroke="#DD344C" stroke-width="1.4" marker-end="url(#arr-red)"/>
   </g>
 </svg>
