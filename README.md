@@ -22,7 +22,7 @@ Production-hardened DevSecOps CI/CD pipeline and pull-based GitOps stack deployi
 | **Pod Security (Restricted)** | Zero-privilege container runtime | `automountServiceAccountToken: false`, `readOnlyRootFilesystem: true`, `drop: ["ALL"]`, `RuntimeDefault` seccomp |
 | **Network Isolation** | Default-deny pod ingress/egress | `NetworkPolicy` allows `:9898` only from same-ns and `envoy-gateway-system`; DNS `:53` egress |
 | **Secrets Management** | Asymmetric GitOps encryption + file mount | `sealed-secrets-controller` (`kube-system`), `scripts/seal-secret.sh`, read-only `0400` file mount (no env var secrets) |
-| **eBPF Runtime Security** | Kernel-level syscall/file enforcement | `TracingPolicyNamespaced` scoped strictly to `app: podinfo` (`SIGKILL` on `/etc/shadow` or `sh`/`bash`/`curl`/`wget`) |
+| **eBPF Runtime Security** | Kernel-level syscall/file enforcement | `TracingPolicyNamespaced` scoped strictly to `app: podinfo` (`SIGKILL` on `/etc/shadow` or any exec outside `/podinfo` via `security_bprm_check`) |
 
 ---
 
