@@ -66,3 +66,33 @@ func TestRegisterHandlersWithPrefix(t *testing.T) {
 		t.Fatalf("GET /api/info returned %d, want %d", rrNoPrefix.Code, http.StatusNotFound)
 	}
 }
+
+func TestHardenedRoutesDisabled(t *testing.T) {
+	srv := NewMockServer()
+	srv.registerHandlers()
+
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/configs"},
+		{method: http.MethodGet, path: "/env"},
+		{method: http.MethodPost, path: "/env"},
+		{method: http.MethodGet, path: "/panic"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			req, err := http.NewRequest(tc.method, tc.path, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rr := httptest.NewRecorder()
+			srv.router.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusNotFound {
+				t.Fatalf("%s %s returned %d, want %d", tc.method, tc.path, rr.Code, http.StatusNotFound)
+			}
+		})
+	}
+}

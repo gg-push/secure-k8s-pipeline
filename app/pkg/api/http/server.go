@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"path"
 	"strings"
 	"sync/atomic"
@@ -144,7 +143,6 @@ func (s *Server) registerHandlers() {
 	s.router.HandleFunc(s.prefixedPath("/version"), s.versionHandler).Methods("GET")
 	s.router.HandleFunc(s.prefixedPath("/echo"), s.echoHandler)
 	s.router.PathPrefix(s.prefixedPath("/echo/")).HandlerFunc(s.echoHandler)
-	s.router.HandleFunc(s.prefixedPath("/env"), s.envHandler).Methods("GET", "POST")
 	s.router.HandleFunc(s.prefixedPath("/headers"), s.echoHeadersHandler).Methods("GET", "POST")
 	s.router.HandleFunc(s.prefixedPath("/delay/{wait:[0-9]+}"), s.delayHandler).Methods("GET").Name("delay")
 	s.router.HandleFunc(s.prefixedPath("/healthz"), s.healthzHandler).Methods("GET")
@@ -154,14 +152,12 @@ func (s *Server) registerHandlers() {
 	s.router.HandleFunc(s.prefixedPath("/fault_injection/enable"), s.enableFaultInjectionHandler).Methods("POST")
 	s.router.HandleFunc(s.prefixedPath("/fault_injection/disable"), s.disableFaultInjectionHandler).Methods("POST")
 	s.router.HandleFunc(s.prefixedPath("/fault_injection/status"), s.faultInjectionStatusHandler).Methods("GET")
-	s.router.HandleFunc(s.prefixedPath("/panic"), s.panicHandler).Methods("GET")
 	s.router.HandleFunc(s.prefixedPath("/status/{code:[0-9]+}"), s.statusHandler).Methods("GET", "POST", "PUT").Name("status")
 	s.router.HandleFunc(s.prefixedPath("/store"), s.storeWriteHandler).Methods("POST", "PUT")
 	s.router.HandleFunc(s.prefixedPath("/store/{hash}"), s.storeReadHandler).Methods("GET").Name("store")
 	s.router.HandleFunc(s.prefixedPath("/cache/{key}"), s.cacheWriteHandler).Methods("POST", "PUT")
 	s.router.HandleFunc(s.prefixedPath("/cache/{key}"), s.cacheDeleteHandler).Methods("DELETE")
 	s.router.HandleFunc(s.prefixedPath("/cache/{key}"), s.cacheReadHandler).Methods("GET").Name("cache")
-	s.router.HandleFunc(s.prefixedPath("/configs"), s.configReadHandler).Methods("GET")
 	s.router.HandleFunc(s.prefixedPath("/token"), s.tokenGenerateHandler).Methods("POST")
 	s.router.HandleFunc(s.prefixedPath("/token/validate"), s.tokenValidateHandler).Methods("GET")
 	s.router.HandleFunc(s.prefixedPath("/api/info"), s.infoHandler).Methods("GET")
@@ -216,17 +212,6 @@ func (s *Server) ListenAndServe() (*http.Server, *http.Server, *int32, *int32) {
 	}
 
 	//s.printRoutes()
-
-	// load configs in memory and start watching for changes in the config dir
-	if stat, err := os.Stat(s.config.ConfigPath); err == nil && stat.IsDir() {
-		var err error
-		watcher, err = fscache.NewWatch(s.config.ConfigPath)
-		if err != nil {
-			s.logger.Error("config watch error", zap.Error(err), zap.String("path", s.config.ConfigPath))
-		} else {
-			watcher.Watch()
-		}
-	}
 
 	// start redis connection pool
 	ticker := time.NewTicker(30 * time.Second)
